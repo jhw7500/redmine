@@ -18,6 +18,7 @@ const INCLUDE_MERGES = process.env.INCLUDE_MERGES === "1";
 const OUTPUT_DIR = process.env.OUTPUT_DIR || "/home/jhw/ai/opencode/projects/redmine/out";
 const OUTPUT_PATH = process.env.OUTPUT_PATH || "";
 const MODE = process.env.MODE || "generate"; // generate | update
+const AUTO_APPROVE = process.env.AUTO_APPROVE === "1";
 const AI_EN_PATH =
   process.env.AI_EN_PATH || "/home/jhw/ai/opencode/projects/redmine/templates/ai-en.md";
 const AI_KO_PATH =
@@ -51,9 +52,13 @@ function aiSummarize(rawContent) {
 6. 너무 작은 단위의 변경은 제외.
 7. 내부 구현 디테일(TLV, EVENT_PORT_RELEASE 등)은 알기 쉽게 풀어쓴다.
 8. 원본과 동일한 마크다운 형식 유지 (#### 헤더, - 들여쓰기 구조).
-9. 카테고리 헤더(PIM, Wireless Lan, AI, GitHub Workflows)와 구조는 유지.
+9. **카테고리 계층 구조를 반드시 유지한다:**
+   - "- PIM" 아래에 "  - Application" 하위 카테고리 유지
+   - "- Wireless Lan" 아래에 "  - NXP" 하위 카테고리 유지
+   - 기능 항목은 하위 카테고리 아래에 들여쓰기로 작성
 10. 내용 없는 카테고리는 삭제.
-11. 마지막에 *작성: Claude Code | 검토:* 와 --- 유지.
+11. 마지막 footer(*작성:...* 및 ---)는 생성하지 않는다. 코드에서 자동 추가한다.
+12. 조현우 섹션만 출력한다. 다른 사람의 섹션은 절대 포함하지 않는다.
 
 원본:
 ${rawContent}
@@ -876,45 +881,77 @@ async function main() {
   const targetOutputPath = buildOutputPath(meetingDate);
   ensureDir(path.dirname(targetOutputPath));
   if (MODE === "generate") {
+    if (fs.existsSync(targetOutputPath)) {
+      const backupPath = targetOutputPath.replace(/\.md$/, ".bak.md");
+      fs.copyFileSync(targetOutputPath, backupPath);
+      console.log(`Backup saved: ${backupPath}`);
+    }
     fs.writeFileSync(targetOutputPath, generatedSection, "utf8");
     console.log(`Draft saved: ${targetOutputPath}`);
   }
-  const newSection =
+  let newSection =
     MODE === "update" && fs.existsSync(targetOutputPath)
       ? fs.readFileSync(targetOutputPath, "utf8")
       : generatedSection;
   const currentSection = extractSection(original);
-  const updated = replaceSection(original, newSection);
 
-  if (!updated || !currentSection) {
+  if (!currentSection) {
+    console.error("Could not find the target section to replace.");
+    process.exit(1);
+  }
+
+  // 조현우 섹션에만 footer 추가
+  const sectionStripped = newSection.replace(/\n*\*작성:.*?\*\n*---\s*$/, "").trimEnd();
+
+  if (MODE !== "update") {
+    const updated = replaceSection(original, sectionStripped + "\n");
+    console.log("--- current section ---\n" + currentSection);
+    console.log("--- updated section ---\n" + sectionStripped);
+    if (original.trim() === updated.trim()) {
+      console.log("No changes detected; skipping update.");
+    } else {
+      console.log("Draft generated only; skipping update.");
+    }
+    return;
+  }
+
+  let approver;
+  if (AUTO_APPROVE) {
+    approver = "auto";
+  } else {
+    const ok = await promptYesNo("Apply update? (y/N) ");
+    if (!ok) {
+      console.log("Cancelled.");
+      return;
+    }
+    approver = "hwjo";
+  }
+
+  const now = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).slice(0, 16);
+  const footerLine = approver === "auto"
+    ? `*작성: Claude Code ${now} | 승인: 없음*`
+    : `*작성: Claude Code ${now} | 승인: ${approver} ${now}*`;
+  const finalSection = sectionStripped + `\n\n${footerLine}\n\n---`;
+  const finalUpdated = replaceSection(original, finalSection);
+
+  if (!finalUpdated) {
     console.error("Could not find the target section to replace.");
     process.exit(1);
   }
 
   console.log("--- current section ---\n" + currentSection);
-  console.log("--- updated section ---\n" + newSection);
+  console.log("--- updated section ---\n" + finalSection);
 
-  if (original.trim() === updated.trim()) {
+  if (original.trim() === finalUpdated.trim()) {
     console.log("No changes detected; skipping update.");
-    return;
-  }
-
-  if (MODE !== "update") {
-    console.log("Draft generated only; skipping update.");
-    return;
-  }
-
-  const ok = await promptYesNo("Apply update? (y/N) ");
-  if (!ok) {
-    console.log("Cancelled.");
     return;
   }
 
   const version = pageData.wiki_page.version;
   const payload = {
     wiki_page: {
-      text: updated,
-      comments: "자동 업데이트",
+      text: finalUpdated,
+      comments: approver === "auto" ? "자동 업데이트 (cron)" : "자동 업데이트 (승인: hwjo)",
       version,
     },
   };
