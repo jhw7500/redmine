@@ -3,18 +3,15 @@
 - PIM
   - Application
 {{PIM_APPLICATION_KO}}
+  - Driver
+{{PIM_DRIVER_KO}}
 
 - Wireless Lan
   - NXP
 {{WIRELESS_NXP_KO}}
 
-- AI
-{{AI_KO}}
+- ETC
+{{ETC_KO}}
 
-- GitHub Workflows
-{{WORKFLOW_KO}}
-{{ETC_SECTION}}
-{{EXTRA_NOTES_EN}}
-{{EXTRA_NOTES_KO}}
 *작성: Claude Code | 승인: hwjo*
 ---

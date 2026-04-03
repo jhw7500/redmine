@@ -1,0 +1,27 @@
+{
+  "repoMap": {
+    "gstApp": "pimApp",
+    "streamApp": "pimApp",
+    "pim-package": "pimApp",
+    "ord": "pimApp",
+    "vcm": "pimApp",
+    "vsd": "pimApp",
+    "max9296": "pimDriver",
+    "sc16is7xx": "pimDriver",
+    "pim-check": "pimTest",
+    "wlan-package": "wlanNxp",
+    "wlan-driver": "wlanNxp",
+    "wpa-supplicant": "wlanNxp",
+    "wlan-bridge": "wlanNxp",
+    "automation": "etc",
+    "redmine": "etc",
+    "cts-ta-mcp-server": "etc",
+    "cts-email-mcp-server": "etc"
+  },
+  "displayNames": {
+    "automation": "CI/CD 자동화",
+    "redmine": "Redmine 주간 보고 자동화",
+    "cts-ta-mcp-server": "HiWorks 근태 관리",
+    "cts-email-mcp-server": "이메일 MCP 서버"
+  }
+}

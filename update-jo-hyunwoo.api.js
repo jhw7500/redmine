@@ -30,6 +30,23 @@ const TEMPLATE_PATH =
 const MEETING_DATE_OVERRIDE = process.env.MEETING_DATE || ""; // YYYY-MM-DD
 const AI_SUMMARIZE = process.env.AI_SUMMARIZE === "1";
 const CLAUDE_CLI = process.env.CLAUDE_CLI || "claude";
+const REPO_CONFIG_PATH =
+  process.env.REPO_CONFIG_PATH || path.join(__dirname, "repo-config.json");
+
+function loadRepoConfig() {
+  if (fs.existsSync(REPO_CONFIG_PATH)) {
+    return JSON.parse(fs.readFileSync(REPO_CONFIG_PATH, "utf8"));
+  }
+  return {};
+}
+
+function loadRepoMap() {
+  return loadRepoConfig().repoMap || {};
+}
+
+function loadDisplayNames() {
+  return loadRepoConfig().displayNames || {};
+}
 
 if (!API_KEY) {
   console.error("Missing REDMINE_API_KEY.");
@@ -40,25 +57,28 @@ console.log(`GITHUB_TOKEN: ${GITHUB_TOKEN ? "SET" : "UNSET"}`);
 
 function aiSummarize(rawContent) {
   if (!AI_SUMMARIZE) return null;
-  const prompt = `아래는 주간 회의 보고서 초안이다. 커밋 단위로 나열되어 있다.
-이것을 팀 회의용으로 기능 중심 요약해라.
+  const prompt = `아래는 주간 회의 보고서 초안이다. 이것을 팀 회의용으로 기능 중심 요약해라.
+
+대상 독자: 개발팀 전체 (git을 사용하지 않는 사람 포함)
 
 규칙:
-1. 관련 커밋들을 기능 단위로 그룹핑한다. 커밋 단위 나열 금지.
-2. 각 기능 항목 아래에 들여쓰기로 세부 내용을 1~2줄 추가한다.
-3. 한글 기본, 기술 용어(영어)는 그대로 사용.
-4. 사소한 커밋(gitignore, log, chore, 바이너리 업데이트, 서브모듈 업데이트 등)은 제외.
-5. 중복 내용은 통합한다.
-6. 너무 작은 단위의 변경은 제외.
-7. 내부 구현 디테일(TLV, EVENT_PORT_RELEASE 등)은 알기 쉽게 풀어쓴다.
-8. 원본과 동일한 마크다운 형식 유지 (#### 헤더, - 들여쓰기 구조).
-9. **카테고리 계층 구조를 반드시 유지한다:**
-   - "- PIM" 아래에 "  - Application" 하위 카테고리 유지
+1. 관련 항목들을 **기능 단위로 크게 묶고**, 하위에 세부 내용을 1~2줄로 나열한다.
+2. 한글 기본, 기술 용어(영어)는 그대로 사용.
+3. 사소한 변경(gitignore, log, chore, 바이너리 업데이트, 서브모듈 업데이트 등)은 제외.
+4. **중복 내용은 반드시 하나로 통합**한다. 같은 기능의 반복 항목 금지.
+5. 내부 구현 디테일(TLV, EVENT_PORT_RELEASE 등)은 알기 쉽게 풀어쓴다.
+6. **PR 번호, issue 번호, 커밋 해시 등 git 참조는 절대 표시하지 않는다.**
+7. "코드 리뷰 반영", "리뷰 피드백", "코드 리뷰 추가 수정" 등 내용 없는 항목은 삭제한다.
+8. "release: vX.Y.Z" 같은 릴리즈 태그도 삭제한다.
+9. 카테고리 계층 구조를 반드시 유지한다:
+   - "- PIM" 아래에 "  - Application", "  - Driver" 하위 카테고리 유지
    - "- Wireless Lan" 아래에 "  - NXP" 하위 카테고리 유지
+   - "- ETC" 카테고리의 모든 항목을 빠짐없이 포함한다
    - 기능 항목은 하위 카테고리 아래에 들여쓰기로 작성
-10. 내용 없는 카테고리는 삭제.
+10. 내용 없는 카테고리는 삭제. 단, 원본에 내용이 있는 카테고리를 임의로 삭제하지 않는다.
 11. 마지막 footer(*작성:...* 및 ---)는 생성하지 않는다. 코드에서 자동 추가한다.
-12. 조현우 섹션만 출력한다. 다른 사람의 섹션은 절대 포함하지 않는다.
+12. 조현우 섹션만 출력한다.
+13. 원본과 동일한 마크다운 형식 유지 (#### 헤더, - 들여쓰기 구조).
 
 원본:
 ${rawContent}
@@ -68,7 +88,7 @@ ${rawContent}
   console.log("AI 요약 중...");
   const result = spawnSync(CLAUDE_CLI, ["-p", prompt, "--output-format", "text"], {
     encoding: "utf8",
-    timeout: 120000,
+    timeout: 300000,
     env: { ...process.env },
   });
 
@@ -207,9 +227,106 @@ function normalizeForDedup(line) {
 }
 
 function isTrivialCommit(line) {
-  return /^(log|gitignore|__pycache__|chore|merge branch|Merge branch|docs\/plans|\.gitignore)/i.test(
-    line.trim()
+  const trimmed = line.trim();
+  if (/^(log|gitignore|__pycache__|chore|merge branch|Merge branch|docs\/plans|\.gitignore)/i.test(trimmed)) return true;
+  // 코드리뷰 관련 내용 없는 커밋
+  if (/^(Address\s+)?PR\s*#\d+\s*(코드\s*리뷰\s*(반영|피드백)|review\s*feedback)\s*$/i.test(trimmed)) return true;
+  if (/^코드\s*리뷰\s*(반영|추가\s*수정|잔여\s*항목|피드백)\s*$/i.test(trimmed)) return true;
+  if (/^(code\s*review\s*(feedback|fix|update)|review\s*feedback)\s*$/i.test(trimmed)) return true;
+  // fix(vX.Y.Z): 코드 리뷰 잔여 항목 전체 수정 (issue #N) 같은 패턴
+  if (/^fix\([^)]*\):\s*코드\s*리뷰/i.test(trimmed)) return true;
+  // release 태그만 있는 커밋
+  if (/^release:\s*v?\d/i.test(trimmed)) return true;
+  // 서브모듈 업데이트
+  if (/^(update|bump)\s+submodule/i.test(trimmed)) return true;
+  return false;
+}
+
+function stripReferences(line) {
+  return line
+    .replace(/\s*\(?\s*(issue|closes?|fixes?|resolves?)\s*#\d+\s*\)?\s*/gi, " ")
+    .replace(/\s*PR\s*#\d+\s*:?\s*/gi, " ")
+    .replace(/\s*#\d+\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectCommitType(line) {
+  const match = line.match(
+    /^(?:[A-Za-z0-9_.-]+:\s*)?(feat|fix|docs|refactor|security|revert|debug|ci|test|build|perf|improve)\s*(?:\([^)]*\))?\s*:\s*/i
   );
+  if (match) return match[1].toLowerCase();
+  const lower = line.toLowerCase();
+  if (/^(add|추가|신규|새로|implement|create)\b/i.test(line)) return "feat";
+  if (/^(fix|수정|버그|bug|patch|hotfix)\b/i.test(line)) return "fix";
+  if (/^(improve|개선|enhance|optimize|안정화|강화)\b/i.test(line)) return "improve";
+  return "etc";
+}
+
+const COMMIT_TYPE_LABELS = {
+  feat: "추가",
+  fix: "수정",
+  improve: "개선",
+  refactor: "리팩토링",
+  docs: "문서",
+  etc: "기타",
+};
+
+function groupByType(lines) {
+  const typeGroups = new Map();
+  for (const line of lines) {
+    const type = detectCommitType(line);
+    const label = COMMIT_TYPE_LABELS[type] || COMMIT_TYPE_LABELS.etc;
+    if (!typeGroups.has(label)) typeGroups.set(label, []);
+    typeGroups.get(label).push(stripTypePrefix(line));
+  }
+  return typeGroups;
+}
+
+function formatGrouped(typeGroups, indent) {
+  const lines = [];
+  for (const [label, items] of typeGroups) {
+    if (!items.length) continue;
+    if (typeGroups.size === 1) {
+      // 그룹이 하나뿐이면 그룹 헤더 없이 바로 나열
+      for (const item of items) lines.push(`${indent}${item}`);
+    } else {
+      lines.push(`${indent}${label}`);
+      for (const item of items) lines.push(`${indent}  - ${item}`);
+    }
+  }
+  return lines.join("\n") || `${indent}(변경 없음)`;
+}
+
+function groupByDisplayName(lines, displayNames) {
+  const groups = new Map();
+  for (const line of lines) {
+    const repoMatch = line.match(/^\[([^\]]+)\]\s*(.*)/);
+    if (repoMatch) {
+      const repoName = repoMatch[1];
+      const content = repoMatch[2];
+      const display = displayNames[repoName] || repoName;
+      if (!groups.has(display)) groups.set(display, []);
+      groups.get(display).push(content);
+    } else {
+      if (!groups.has("기타")) groups.set("기타", []);
+      groups.get("기타").push(line);
+    }
+  }
+  return groups;
+}
+
+function formatEtcGrouped(lines, displayNames) {
+  const repoGroups = groupByDisplayName(lines, displayNames);
+  const result = [];
+  for (const [display, items] of repoGroups) {
+    if (!items.length) continue;
+    const cleaned = items.map(stripTypePrefix).filter((l) => !isTrivialCommit(l));
+    if (!cleaned.length) continue;
+    result.push(`  - ${display}`);
+    for (const item of cleaned) result.push(`    - ${item}`);
+  }
+  return result.join("\n") || "  - (변경 없음)";
 }
 
 function isWorkflowRelated(line) {
@@ -515,22 +632,20 @@ async function enrichPrSummaries(lines, repo, cache) {
       continue;
     }
     const prNumber = match[1];
-    const fallback = match[2]?.trim() || "리뷰 피드백 반영";
+    const fallback = (match[2] || "").trim();
     const info = await fetchPrInfo(repo, prNumber, cache);
     const title = info && info.title ? info.title : null;
-    const summary = info && info.summary ? info.summary : null;
-    const titleKo = title ? koreanizePrLine(title) : koreanizePrLine(fallback);
-    results.push(`PR #${prNumber}: ${titleKo}`);
-    if (summary) {
-      results.push(`\tsummary: ${koreanizePrLine(summary)}`);
-    }
+
+    // PR 제목에서 실제 기능 설명 추출 (번호 제거)
+    const titleKo = title ? koreanizePrLine(title) : (fallback ? koreanizePrLine(fallback) : null);
+    if (!titleKo || titleKo === "주요 개선 사항 반영") continue;
+    results.push(stripReferences(titleKo));
+
+    // highlights에서 실질적 내용만 하위 항목으로
     const bullets = [];
     if (info && Array.isArray(info.highlights)) {
       const trimmed = pruneHighlights(info.highlights);
       if (trimmed && trimmed.length) bullets.push(...trimmed);
-    }
-    if (!bullets.length && summary) {
-      bullets.push(summary);
     }
     const uniqueBullets = [];
     const seen = new Set();
@@ -538,20 +653,11 @@ async function enrichPrSummaries(lines, repo, cache) {
       const key = normalizeForDedup(b);
       if (seen.has(key)) continue;
       seen.add(key);
-      uniqueBullets.push(b);
+      const ko = koreanizePrLine(b);
+      if (ko && ko !== "주요 개선 사항 반영") uniqueBullets.push(ko);
     }
-    const koreanized = uniqueBullets.map((b) => koreanizePrLine(b));
-    const pruned = [];
-    const seenKo = new Set();
-    for (const k of koreanized) {
-      if (k === "주요 개선 사항 반영") continue;
-      const key = normalizeForDedup(k);
-      if (seenKo.has(key)) continue;
-      seenKo.add(key);
-      pruned.push(k);
-    }
-    for (const k of pruned.slice(0, 3)) {
-      results.push(`\t${k}`);
+    for (const k of uniqueBullets.slice(0, 2)) {
+      results.push(`\t${stripReferences(k)}`);
     }
   }
   return results;
@@ -560,25 +666,18 @@ async function enrichPrSummaries(lines, repo, cache) {
 function summarizeLines(lines) {
   const filtered = [];
   for (const line of lines) {
-    const prMulti = line.match(/Address PR #([\d,\s]+) review feedback:?\s*(.*)/i);
-    if (prMulti) {
-      const desc = prMulti[2]?.trim();
-      const ids = prMulti[1]
-        .split(",")
-        .map((value) => value.trim())
-        .filter(Boolean);
-      for (const id of ids) {
-        filtered.push(desc ? `PR #${id}: ${desc}` : `PR #${id}: 리뷰 피드백 반영`);
+    // PR review feedback with description → keep description only
+    const prWithDesc = line.match(/(?:Address\s+)?PR\s*#[\d,\s]+\s*(?:review\s*feedback)?:?\s*(.+)/i);
+    if (prWithDesc) {
+      const desc = prWithDesc[1].trim();
+      // 내용이 실질적인 경우만 유지
+      if (desc && !/^(리뷰\s*피드백\s*반영|review\s*feedback|코드\s*리뷰)$/i.test(desc)) {
+        filtered.push(stripReferences(desc));
       }
       continue;
     }
-    const prSingle = line.match(/Address PR #(\d+) review feedback:?\s*(.*)/i);
-    if (prSingle) {
-      const desc = prSingle[2]?.trim();
-      filtered.push(desc ? `PR #${prSingle[1]}: ${desc}` : `PR #${prSingle[1]}: 리뷰 피드백 반영`);
-      continue;
-    }
-    filtered.push(line);
+    // 일반 라인에서도 PR/issue 번호 제거
+    filtered.push(stripReferences(line));
   }
 
   const normalized = filtered.map((line) => line.toLowerCase());
@@ -682,42 +781,28 @@ async function buildAutoContent(startDate, endDate) {
   const repos = listGitRepos(REPO_ROOT);
   const groups = {
     pimApp: [],
-    wirelessNxp: [],
-    workflows: [],
+    pimDriver: [],
+    wlanNxp: [],
     etc: [],
   };
-  const repoMap = {
-    gstApp: "pimApp",
-    max9296: "pimApp",
-    "pim-package-org": "pimApp",
-    streamApp: "pimApp",
-    "wlan-package": "wirelessNxp",
-    "wlan-driver": "wirelessNxp",
-    "wpa-supplicant": "wirelessNxp",
-    "wlan-bridge": "wirelessNxp",
-    automation: "workflows",
-    automation_repo: "workflows",
-  };
+  const repoMap = loadRepoMap();
   const prCache = new Map();
 
   for (const repoPath of repos) {
     const repoName = path.basename(repoPath);
     const groupKey = repoMap[repoName];
     if (!groupKey) continue; // 매핑되지 않은 저장소는 건너뜀
+    if (!groups[groupKey]) groups[groupKey] = [];
     const allCommits = getGitCommits(repoPath, startDate, endDate)
       .map((line) => line.trim())
-      .filter(Boolean);
-    const cleanedCommits = allCommits.map(stripTypePrefix).filter((line) => !isTrivialCommit(line));
-    if (repoName === "automation" || repoName === "automation_repo") {
-      groups.workflows.push(...cleanedCommits);
-      continue;
+      .filter(Boolean)
+      .filter((line) => !isTrivialCommit(line));
+    if (groupKey === "etc") {
+      groups[groupKey].push(...allCommits.map((line) => `[${repoName}] ${line}`));
+    } else {
+      // 타입 prefix 보존하여 저장 (groupByType에서 사용)
+      groups[groupKey].push(...allCommits);
     }
-    const commits = cleanedCommits.filter((line) => !isWorkflowRelated(line));
-    const workflowCommits = cleanedCommits
-      .filter((line) => isWorkflowRelated(line))
-      .map((line) => line);
-    groups[groupKey].push(...commits);
-    groups.workflows.push(...workflowCommits);
   }
 
   const dedupe = (items) => {
@@ -732,47 +817,32 @@ async function buildAutoContent(startDate, endDate) {
     return result;
   };
 
-  const pimAppRaw = summarizeLines(dedupe(groups.pimApp));
-  const wirelessRaw = summarizeLines(dedupe(groups.wirelessNxp));
-  const etcRaw = summarizeLines(dedupe(groups.etc));
-  const pimAppEn = await enrichPrSummaries(pimAppRaw, "gstApp", prCache);
-  const wirelessEn = await enrichPrSummaries(wirelessRaw, "wlan-package", prCache);
-  const workflowsSummary = summarizeWorkflows(dedupe(groups.workflows));
-  const workflowsEn = workflowsSummary.en;
-  const workflowsKo = workflowsSummary.ko;
-  const pimAppKo = pimAppEn.map(translateLine);
-  const wirelessKo = wirelessEn.map(translateLine);
+  const displayNames = loadDisplayNames();
 
-  const extraNotes =
-    EXTRA_NOTES_PATH && fs.existsSync(EXTRA_NOTES_PATH)
-      ? fs
-          .readFileSync(EXTRA_NOTES_PATH, "utf8")
-          .split("\n")
-          .map((line) => line.trim())
-          .filter(Boolean)
-      : [];
+  // 일반 카테고리: 타입별 그룹핑 (기능 추가 / 버그 수정 / 개선)
+  const pimAppGrouped = groupByType(dedupe(groups.pimApp));
+  const pimDriverGrouped = groupByType(dedupe(groups.pimDriver));
+  const wlanGrouped = groupByType(dedupe(groups.wlanNxp));
 
-  const extraEn = extraNotes;
-  const extraKo = extraNotes.map(translateLine);
+  // 한글 번역 적용
+  for (const [label, items] of pimAppGrouped) {
+    pimAppGrouped.set(label, items.map(translateLine));
+  }
+  for (const [label, items] of pimDriverGrouped) {
+    pimDriverGrouped.set(label, items.map(translateLine));
+  }
+  for (const [label, items] of wlanGrouped) {
+    wlanGrouped.set(label, items.map(translateLine));
+  }
+
+  // ETC: 표시이름별 그룹핑
+  const etcFormatted = formatEtcGrouped(dedupe(groups.etc), displayNames);
 
   return {
-    "{{PIM_APPLICATION_EN}}": formatList(pimAppEn, "    - ", "(no changes)"),
-    "{{WIRELESS_NXP_EN}}": formatList(wirelessEn, "    - ", "(no changes)"),
-    "{{WORKFLOW_EN}}": formatList(workflowsEn, "    - ", "(no changes)"),
-    "{{PIM_APPLICATION_KO}}": formatList(pimAppKo, "    - ", "(변경 없음)"),
-    "{{WIRELESS_NXP_KO}}": formatList(wirelessKo, "    - ", "(변경 없음)"),
-    "{{WORKFLOW_KO}}": formatList(workflowsKo, "  - ", "(변경 없음)"),
-    "{{AI_EN}}": formatBulletsFromFile(AI_EN_PATH, "    - ", "(수동 입력)"),
-    "{{AI_KO}}": formatBulletsFromFile(AI_KO_PATH, "    - ", "(수동 입력)"),
-    "{{ETC_SECTION}}": etcRaw.length
-      ? `\n- ETC\n${formatList(etcRaw.map(translateLine), "    - ", "")}`
-      : "",
-    "{{EXTRA_NOTES_EN}}": extraEn.length
-      ? `- Additional Notes\n${formatList(extraEn, "  - ", "")}`
-      : "",
-    "{{EXTRA_NOTES_KO}}": extraKo.length
-      ? `- 추가 메모\n${formatList(extraKo, "  - ", "")}`
-      : "",
+    "{{PIM_APPLICATION_KO}}": formatGrouped(pimAppGrouped, "    - "),
+    "{{PIM_DRIVER_KO}}": formatGrouped(pimDriverGrouped, "    - "),
+    "{{WIRELESS_NXP_KO}}": formatGrouped(wlanGrouped, "    - "),
+    "{{ETC_KO}}": etcFormatted,
   };
 }
 
