@@ -1,27 +1,116 @@
 {
-  "repoMap": {
-    "gstApp": "pimApp",
-    "streamApp": "pimApp",
-    "pim-package": "pimApp",
-    "ord": "pimApp",
-    "vcm": "pimApp",
-    "vsd": "pimApp",
-    "max9296": "pimDriver",
-    "sc16is7xx": "pimDriver",
-    "pim-check": "pimTest",
-    "wlan-package": "wlanNxp",
-    "wlan-driver": "wlanNxp",
-    "wpa-supplicant": "wlanNxp",
-    "wlan-bridge": "wlanNxp",
-    "automation": "etc",
-    "redmine": "etc",
-    "cts-ta-mcp-server": "etc",
-    "cts-email-mcp-server": "etc"
+  "repos": {
+    "gstApp": {
+      "path": "/home/jhw/ai/opencode/projects/gstApp",
+      "category": "pimApp"
+    },
+    "streamApp": {
+      "path": "/home/jhw/ai/opencode/projects/streamApp",
+      "category": "pimApp"
+    },
+    "pim-package-jhw": {
+      "path": "/home/jhw/ai/opencode/projects/pim-package-jhw",
+      "category": "pimApp"
+    },
+    "max9296": {
+      "path": "/home/jhw/ai/opencode/projects/max9296",
+      "category": "pimDriver"
+    },
+    "sc16is7xx": {
+      "path": "/home/jhw/ai/opencode/projects/sc16is7xx",
+      "category": "pimDriver"
+    },
+    "pim-check": {
+      "path": "/home/jhw/ai/opencode/projects/pim-check",
+      "category": "pimTest"
+    },
+    "wlan-package": {
+      "path": "/home/jhw/ai/opencode/projects/wlan-package",
+      "category": "wlanNxp"
+    },
+    "wlan-bridge": {
+      "path": "/home/jhw/ai/opencode/projects/wlan-package/wlan-bridge",
+      "category": "wlanNxp"
+    },
+    "wlan-driver": {
+      "path": "/home/jhw/ai/opencode/projects/wlan-driver",
+      "category": "wlanNxp"
+    },
+    "wpa-supplicant": {
+      "path": "/home/jhw/ai/opencode/projects/wpa-supplicant",
+      "category": "wlanNxp"
+    },
+    "automation": {
+      "path": "/home/jhw/ai/opencode/projects/automation",
+      "category": "etc",
+      "displayName": "CI/CD 자동화"
+    },
+    "redmine": {
+      "path": "/home/jhw/ai/opencode/projects/redmine",
+      "category": "etc",
+      "displayName": "Redmine 주간 보고 자동화"
+    },
+    "cts-ta-mcp-server": {
+      "path": "/home/jhw/ai/opencode/projects/cts-ta-mcp-server",
+      "category": "etc",
+      "displayName": "HiWorks 근태 관리"
+    },
+    "cts-email-mcp-server": {
+      "path": "/home/jhw/ai/opencode/projects/cts-email-mcp-server",
+      "category": "etc",
+      "displayName": "이메일 MCP 서버"
+    }
   },
-  "displayNames": {
-    "automation": "CI/CD 자동화",
-    "redmine": "Redmine 주간 보고 자동화",
-    "cts-ta-mcp-server": "HiWorks 근태 관리",
-    "cts-email-mcp-server": "이메일 MCP 서버"
+  "categories": {
+    "pimApp": { "label": "Application", "parent": "PIM", "templateKey": "PIM_APPLICATION_KO" },
+    "pimDriver": { "label": "Driver", "parent": "PIM", "templateKey": "PIM_DRIVER_KO" },
+    "pimTest": { "label": "Test", "parent": "PIM", "templateKey": "PIM_TEST_KO" },
+    "wlanNxp": { "label": "NXP", "parent": "Wireless Lan", "templateKey": "WIRELESS_NXP_KO" },
+    "etc": { "label": null, "parent": "ETC", "templateKey": "ETC_KO" }
+  },
+  "commitTypes": {
+    "feat": {
+      "label": "추가",
+      "conventionalPrefixes": ["feat"],
+      "linePatterns": ["^(add|추가|신규|새로|implement|create)\\b"]
+    },
+    "fix": {
+      "label": "수정",
+      "conventionalPrefixes": ["fix"],
+      "linePatterns": ["^(fix|수정|버그|bug|patch|hotfix)\\b"]
+    },
+    "improve": {
+      "label": "개선",
+      "conventionalPrefixes": ["improve", "perf"],
+      "linePatterns": ["^(improve|개선|enhance|optimize|안정화|강화)\\b"]
+    },
+    "refactor": {
+      "label": "리팩토링",
+      "conventionalPrefixes": ["refactor"],
+      "linePatterns": []
+    },
+    "docs": {
+      "label": "문서",
+      "conventionalPrefixes": ["docs"],
+      "linePatterns": []
+    }
+  },
+  "trivialPatterns": [
+    "^(log|gitignore|__pycache__|chore|merge branch|Merge branch|docs\\/plans|\\.gitignore)",
+    "^(Address\\s+)?PR\\s*#\\d+\\s*(코드\\s*리뷰\\s*(반영|피드백)|review\\s*feedback)\\s*$",
+    "^코드\\s*리뷰\\s*(반영|추가\\s*수정|잔여\\s*항목|피드백)\\s*$",
+    "^(code\\s*review\\s*(feedback|fix|update)|review\\s*feedback)\\s*$",
+    "^fix\\([^)]*\\):\\s*코드\\s*리뷰",
+    "^release:\\s*v?\\d",
+    "^(update|bump)\\s+submodule"
+  ],
+  "defaults": {
+    "baseUrl": "http://192.168.10.2:30002",
+    "projectId": "team-4-weekly-meeting",
+    "pageSuffix": "개발4팀_주간_회의",
+    "sectionHeader": "#### <span style=\"color:blue\">조현우</span>",
+    "outputDir": "out",
+    "githubOwner": "jhw7500",
+    "claudeCli": "claude"
   }
 }

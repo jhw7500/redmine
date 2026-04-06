@@ -1,0 +1,382 @@
+[
+  {
+    "pattern": "Address code review feedback for PR #(\\d+)",
+    "flags": "i",
+    "replacement": "PR #$1 코드 리뷰 피드백 반영"
+  },
+  {
+    "pattern": "revert:\\s*Defer security improvements for production compatibility",
+    "flags": "i",
+    "replacement": "리버트: 프로덕션 호환성 위해 보안 개선 보류"
+  },
+  {
+    "pattern": "Refine postinst printk config and ignore SDK scripts",
+    "flags": "i",
+    "replacement": "postinst printk 설정 개선 및 SDK 스크립트 제외"
+  },
+  {
+    "pattern": "Update dist\\/wlan\\/usr\\/local\\/scripts\\/wifi_logger_cpu\\.sh",
+    "flags": "i",
+    "replacement": "dist/wlan/usr/local/scripts/wifi_logger_cpu.sh 업데이트"
+  },
+  {
+    "pattern": "Harden packaging scripts and update wlan-bridge",
+    "flags": "i",
+    "replacement": "패키징 스크립트 강화 및 wlan-bridge 업데이트"
+  },
+  {
+    "pattern": "Adjust installer time threshold",
+    "flags": "i",
+    "replacement": "installer 시간 임계치 조정"
+  },
+  {
+    "pattern": "Fix critical and high priority issues",
+    "flags": "i",
+    "replacement": "치명/고우선 이슈 수정"
+  },
+  {
+    "pattern": "post auto review without code fences",
+    "flags": "i",
+    "replacement": "코드 펜스 없이 자동 리뷰 게시"
+  },
+  {
+    "pattern": "inline gemini-dispatch actions",
+    "flags": "i",
+    "replacement": "gemini-dispatch 액션 인라인화"
+  },
+  {
+    "pattern": "call nested gemini workflows via caller",
+    "flags": "i",
+    "replacement": "caller를 통해 중첩 gemini 워크플로 호출"
+  },
+  {
+    "pattern": "make gemini-dispatch safe across events",
+    "flags": "i",
+    "replacement": "gemini-dispatch 이벤트 호환성 강화"
+  },
+  {
+    "pattern": "make automation workflows reusable",
+    "flags": "i",
+    "replacement": "automation 워크플로 재사용 가능화"
+  },
+  {
+    "pattern": "use unquoted secrets inherit",
+    "flags": "i",
+    "replacement": "따옴표 없는 secrets inherit 사용"
+  },
+  {
+    "pattern": "avoid fromJSON var parsing",
+    "flags": "i",
+    "replacement": "fromJSON 변수 파싱 회피"
+  },
+  {
+    "pattern": "remove invalid chars from scheduled triage",
+    "flags": "i",
+    "replacement": "스케줄된 triage의 잘못된 문자 제거"
+  },
+  {
+    "pattern": "Add write permission for Claude Code Review workflow",
+    "flags": "i",
+    "replacement": "Claude Code Review 워크플로 쓰기 권한 추가"
+  },
+  {
+    "pattern": "Add automated re-review request workflow",
+    "flags": "i",
+    "replacement": "자동 재리뷰 요청 워크플로 추가"
+  },
+  {
+    "pattern": "improve GitHub Actions workflows with centralized config and security enhancements",
+    "flags": "i",
+    "replacement": "중앙 설정과 보안 개선으로 GitHub Actions 워크플로 개선"
+  },
+  {
+    "pattern": "Add security documentation and GitHub Actions workflows",
+    "flags": "i",
+    "replacement": "보안 문서 및 GitHub Actions 워크플로 추가"
+  },
+  {
+    "pattern": "avoid submodule checkout in shellcheck",
+    "flags": "i",
+    "replacement": "shellcheck에서 서브모듈 체크아웃 회피"
+  },
+  {
+    "pattern": "use shared workflows",
+    "flags": "i",
+    "replacement": "공용 워크플로 사용"
+  },
+  {
+    "pattern": "add legacy gemini workflows",
+    "flags": "i",
+    "replacement": "레거시 gemini 워크플로 추가"
+  },
+  {
+    "pattern": "reorganize Gemini workflows",
+    "flags": "i",
+    "replacement": "Gemini 워크플로 재정리"
+  },
+  {
+    "pattern": "Unify review headers and Gemini prompts",
+    "flags": "i",
+    "replacement": "리뷰 헤더 및 Gemini 프롬프트 통합"
+  },
+  {
+    "pattern": "Address PR #(\\d+) review feedback",
+    "flags": "i",
+    "replacement": "PR #$1 리뷰 피드백 반영"
+  },
+  {
+    "pattern": "Address PR #(\\d+),\\s*(\\d+) review feedback",
+    "flags": "i",
+    "replacement": "PR #$1, #$2 리뷰 피드백 반영"
+  },
+  {
+    "pattern": "Address PR #([\\d,\\s]+) review feedback",
+    "flags": "i",
+    "replacement": "PR #$1 리뷰 피드백 반영"
+  },
+  {
+    "pattern": "code review feedback",
+    "flags": "i",
+    "replacement": "코드 리뷰 피드백"
+  },
+  {
+    "pattern": "Add write permission",
+    "flags": "i",
+    "replacement": "쓰기 권한 추가"
+  },
+  {
+    "pattern": "Add automated re-review request",
+    "flags": "i",
+    "replacement": "자동 재리뷰 요청 추가"
+  },
+  {
+    "pattern": "Defer security improvements",
+    "flags": "i",
+    "replacement": "보안 개선 보류"
+  },
+  {
+    "pattern": "Improve wifi init and cpu logging",
+    "flags": "i",
+    "replacement": "Wi-Fi 초기화 및 CPU 로깅 개선"
+  },
+  {
+    "pattern": "Update (.+)",
+    "flags": "i",
+    "replacement": "$1 업데이트"
+  },
+  {
+    "pattern": "Harden (.+)",
+    "flags": "i",
+    "replacement": "$1 강화"
+  },
+  {
+    "pattern": "Refine (.+)",
+    "flags": "i",
+    "replacement": "$1 개선"
+  },
+  {
+    "pattern": "postinst printk config",
+    "flags": "i",
+    "replacement": "postinst printk 설정"
+  },
+  {
+    "pattern": "ignore SDK scripts",
+    "flags": "i",
+    "replacement": "SDK 스크립트 제외"
+  },
+  {
+    "pattern": "installer time threshold",
+    "flags": "i",
+    "replacement": "installer 시간 임계치"
+  },
+  {
+    "pattern": "packaging scripts",
+    "flags": "i",
+    "replacement": "패키징 스크립트"
+  },
+  {
+    "pattern": "review headers",
+    "flags": "i",
+    "replacement": "리뷰 헤더"
+  },
+  {
+    "pattern": "Gemini prompts",
+    "flags": "i",
+    "replacement": "Gemini 프롬프트"
+  },
+  {
+    "pattern": "GitHub Actions workflows?",
+    "flags": "i",
+    "replacement": "GitHub Actions 워크플로우"
+  },
+  {
+    "pattern": "workflow(s)?",
+    "flags": "i",
+    "replacement": "workflow"
+  },
+  {
+    "pattern": "actions?",
+    "flags": "i",
+    "replacement": "액션"
+  },
+  {
+    "pattern": "security",
+    "flags": "i",
+    "replacement": "보안"
+  },
+  {
+    "pattern": "review",
+    "flags": "i",
+    "replacement": "리뷰"
+  },
+  {
+    "pattern": "for production compatibility",
+    "flags": "i",
+    "replacement": "프로덕션 호환성 위해"
+  },
+  {
+    "pattern": "without code fences",
+    "flags": "i",
+    "replacement": "코드 펜스 없이"
+  },
+  {
+    "pattern": "disable nested dispatch jobs",
+    "flags": "i",
+    "replacement": "중첩 디스패치 작업 비활성화"
+  },
+  {
+    "pattern": "use unquoted secrets inherit",
+    "flags": "i",
+    "replacement": "따옴표 없는 secrets inherit 사용"
+  },
+  {
+    "pattern": "avoid fromJSON var parsing",
+    "flags": "i",
+    "replacement": "fromJSON 변수 파싱 회피"
+  },
+  {
+    "pattern": "remove invalid chars from scheduled triage",
+    "flags": "i",
+    "replacement": "스케줄된 triage의 잘못된 문자 제거"
+  },
+  {
+    "pattern": "inline gemini-dispatch actions",
+    "flags": "i",
+    "replacement": "gemini-dispatch 액션 인라인화"
+  },
+  {
+    "pattern": "make gemini-dispatch safe across events",
+    "flags": "i",
+    "replacement": "gemini-dispatch 이벤트 호환성 강화"
+  },
+  {
+    "pattern": "call nested gemini workflows via caller",
+    "flags": "i",
+    "replacement": "caller로 중첩 gemini 워크플로 호출"
+  },
+  {
+    "pattern": "make automation workflows reusable",
+    "flags": "i",
+    "replacement": "automation 워크플로 재사용 가능화"
+  },
+  {
+    "pattern": "add shared Gemini\\/Claude workflows",
+    "flags": "i",
+    "replacement": "공용 Gemini/Claude 워크플로 추가"
+  },
+  {
+    "pattern": "\\blegacy\\b",
+    "flags": "i",
+    "replacement": "레거시"
+  },
+  {
+    "pattern": "\\bshared\\b",
+    "flags": "i",
+    "replacement": "공용"
+  },
+  {
+    "pattern": "\\brestore\\b",
+    "flags": "i",
+    "replacement": "복원"
+  },
+  {
+    "pattern": "\\buse\\b",
+    "flags": "i",
+    "replacement": "사용"
+  },
+  {
+    "pattern": "\\bavoid\\b",
+    "flags": "i",
+    "replacement": "회피"
+  },
+  {
+    "pattern": "\\bdisable\\b",
+    "flags": "i",
+    "replacement": "비활성화"
+  },
+  {
+    "pattern": "\\binline\\b",
+    "flags": "i",
+    "replacement": "인라인화"
+  },
+  {
+    "pattern": "\\bsafe\\b",
+    "flags": "i",
+    "replacement": "안정화"
+  },
+  {
+    "pattern": "\\breusable\\b",
+    "flags": "i",
+    "replacement": "재사용 가능"
+  },
+  {
+    "pattern": "\\bmake\\b",
+    "flags": "i",
+    "replacement": "구성"
+  },
+  {
+    "pattern": "\\bcall\\b",
+    "flags": "i",
+    "replacement": "호출"
+  },
+  {
+    "pattern": "\\badd\\b",
+    "flags": "i",
+    "replacement": "추가"
+  },
+  {
+    "pattern": "\\bremove\\b",
+    "flags": "i",
+    "replacement": "제거"
+  },
+  {
+    "pattern": "\\bimprove\\b",
+    "flags": "i",
+    "replacement": "개선"
+  },
+  {
+    "pattern": "\\bwith\\b",
+    "flags": "gi",
+    "replacement": "및"
+  },
+  {
+    "pattern": "\\band\\b",
+    "flags": "gi",
+    "replacement": "및"
+  },
+  {
+    "pattern": "\\bvia\\b",
+    "flags": "gi",
+    "replacement": "통해"
+  },
+  {
+    "pattern": "\\btriage\\b",
+    "flags": "gi",
+    "replacement": "트리아주"
+  },
+  {
+    "pattern": "\\bsecrets inherit\\b",
+    "flags": "gi",
+    "replacement": "secrets 상속"
+  }
+]

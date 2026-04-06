@@ -10,4 +10,4 @@ fi
 
 export MODE="${MODE:-generate}"
 export PATH="/home/jhw/.nvm/versions/node/v24.12.0/bin:/home/jhw/.local/bin:$PATH"
-node /home/jhw/ai/opencode/projects/redmine/update-jo-hyunwoo.api.js
+node /home/jhw/ai/opencode/projects/redmine/index.js

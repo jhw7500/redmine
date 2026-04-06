@@ -9,4 +9,5 @@ if [[ -f /home/jhw/ai/opencode/projects/redmine/.env ]]; then
 fi
 
 export MODE=update
-node /home/jhw/ai/opencode/projects/redmine/update-jo-hyunwoo.api.js
+export PATH="/home/jhw/.nvm/versions/node/v24.12.0/bin:/home/jhw/.local/bin:$PATH"
+node /home/jhw/ai/opencode/projects/redmine/index.js
