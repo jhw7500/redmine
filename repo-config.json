@@ -1,4 +1,38 @@
 {
+  "sources": {
+    "git": { "enabled": true },
+    "notion": {
+      "enabled": true,
+      "databases": ["Projects", "Knowledge Base"],
+      "projectMapping": {
+        "max9296": "pimDriver",
+        "MAX9296 GMSL2": "pimDriver",
+        "pim-package": "pimApp",
+        "pim-check": "pimTest",
+        "wlan-driver": "wlanDriver",
+        "wlan-driver-v2": "wlanDriver",
+        "wlan-package": "wlanApp",
+        "wlan-bridge": "wlanApp",
+        "wifi-sniff": "wlanTest",
+        "pcap-analyzer": "wlanTest",
+        "redmine": "etc",
+        "automation": "etc",
+        "email-mcp": "etc",
+        "cts-ta": "etc",
+        "pcap-analyzer": "etc"
+      }
+    },
+    "session": {
+      "enabled": true,
+      "keywords": [
+        "max9296", "gstApp", "streamApp", "pim-package", "pim-check",
+        "wlan-driver", "wlan-package", "wlan-bridge", "wpa-supplicant",
+        "sc16is7xx", "redmine", "automation", "cts-ta", "cts-email",
+        "pcap-analyzer", "wifi-sniff"
+      ],
+      "maxResults": 10
+    }
+  },
   "repos": {
     "gstApp": {
       "path": "/home/jhw/ai/opencode/projects/gstApp",
@@ -14,11 +48,11 @@
     },
     "max9296": {
       "path": "/home/jhw/ai/opencode/projects/max9296",
-      "category": "pimDriver"
+      "category": "pimDriverCam"
     },
     "sc16is7xx": {
       "path": "/home/jhw/ai/opencode/projects/sc16is7xx",
-      "category": "pimDriver"
+      "category": "pimDriverSpiToUart"
     },
     "pim-check": {
       "path": "/home/jhw/ai/opencode/projects/pim-check",
@@ -26,19 +60,27 @@
     },
     "wlan-package": {
       "path": "/home/jhw/ai/opencode/projects/wlan-package",
-      "category": "wlanNxp"
+      "category": "wlanApp"
     },
     "wlan-bridge": {
       "path": "/home/jhw/ai/opencode/projects/wlan-package/wlan-bridge",
-      "category": "wlanNxp"
+      "category": "wlanApp"
     },
     "wlan-driver": {
       "path": "/home/jhw/ai/opencode/projects/wlan-driver",
-      "category": "wlanNxp"
+      "category": "wlanDriver"
+    },
+    "mwifiex_6.2": {
+      "path": "/home/jhw/ai/opencode/projects/wlan-driver-v2",
+      "category": "wlanDriver"
     },
     "wpa-supplicant": {
       "path": "/home/jhw/ai/opencode/projects/wpa-supplicant",
-      "category": "wlanNxp"
+      "category": "wlanApp"
+    },
+    "pcap-analyzer": {
+      "path": "/home/jhw/ai/opencode/projects/pcap-analyzer",
+      "category": "wlanTest"
     },
     "automation": {
       "path": "/home/jhw/ai/opencode/projects/automation",
@@ -59,13 +101,21 @@
       "path": "/home/jhw/ai/opencode/projects/cts-email-mcp-server",
       "category": "etc",
       "displayName": "이메일 MCP 서버"
+    },
+    "jhw-notion": {
+      "path": "/home/jhw/ai/opencode/projects/jhw-notion",
+      "category": "etc",
+      "displayName": "Notion MCP 서버"
     }
   },
   "categories": {
     "pimApp": { "label": "Application", "parent": "PIM", "templateKey": "PIM_APPLICATION_KO" },
-    "pimDriver": { "label": "Driver", "parent": "PIM", "templateKey": "PIM_DRIVER_KO" },
+    "pimDriverCam": { "label": "Camera Driver", "parent": "PIM", "templateKey": "PIM_DRIVER_CAM_KO" },
+    "pimDriverSpiToUart": { "label": "SPI-to-UART Driver", "parent": "PIM", "templateKey": "PIM_DRIVER_SPI2UART_KO" },
     "pimTest": { "label": "Test", "parent": "PIM", "templateKey": "PIM_TEST_KO" },
-    "wlanNxp": { "label": "NXP", "parent": "Wireless Lan", "templateKey": "WIRELESS_NXP_KO" },
+    "wlanApp": { "label": "Application", "parent": "Wireless Lan", "templateKey": "WLAN_APPLICATION_KO" },
+    "wlanDriver": { "label": "Driver", "parent": "Wireless Lan", "templateKey": "WLAN_DRIVER_KO" },
+    "wlanTest": { "label": "Test/Analysis", "parent": "Wireless Lan", "templateKey": "WLAN_TEST_KO" },
     "etc": { "label": null, "parent": "ETC", "templateKey": "ETC_KO" }
   },
   "commitTypes": {
@@ -102,7 +152,23 @@
     "^(code\\s*review\\s*(feedback|fix|update)|review\\s*feedback)\\s*$",
     "^fix\\([^)]*\\):\\s*코드\\s*리뷰",
     "^release:\\s*v?\\d",
-    "^(update|bump)\\s+submodule"
+    "^(update|bump)\\s+submodule",
+    "^(wip|work in progress)\\b",
+    "^(initial commit|first commit)\\s*$",
+    "^커밋\\s*메시지\\s*(정정|수정|변경)",
+    "^(fix|correct)\\s+commit\\s+message",
+    "^(typo|오타)\\s*(fix|수정)?\\s*$",
+    "^(minor|small)\\s*(fix|change|update|tweak)\\b",
+    "^(clean\\s*up|cleanup|정리)\\s*$",
+    "^(style|lint|format|prettier|eslint)\\b",
+    "^(rebase|squash|amend|cherry-pick)\\b",
+    "^\\.(gitignore|editorconfig|eslintrc|prettierrc)\\b",
+    "^(rename|move)\\s+(file|dir|folder)\\b",
+    "^(apply|add|use)\\s+(shared|common|공통)\\s+workflow",
+    "^bump[-_]?automation[-_]?ref\\b",
+    "^(add|apply)\\s+.*(claude|gemini).*workflow",
+    "^add\\s+(commitlint|shellcheck|bump-automation)\\s+(workflow|config)",
+    "^add\\s+git\\s+lfs\\b"
   ],
   "defaults": {
     "baseUrl": "http://192.168.10.2:30002",

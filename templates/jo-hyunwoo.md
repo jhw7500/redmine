@@ -3,12 +3,20 @@
 - PIM
   - Application
 {{PIM_APPLICATION_KO}}
-  - Driver
-{{PIM_DRIVER_KO}}
+  - Camera Driver
+{{PIM_DRIVER_CAM_KO}}
+  - SPI-to-UART Driver
+{{PIM_DRIVER_SPI2UART_KO}}
+  - Test
+{{PIM_TEST_KO}}
 
 - Wireless Lan
-  - NXP
-{{WIRELESS_NXP_KO}}
+  - Application
+{{WLAN_APPLICATION_KO}}
+  - Driver
+{{WLAN_DRIVER_KO}}
+  - Test/Analysis
+{{WLAN_TEST_KO}}
 
 - ETC
 {{ETC_KO}}

@@ -1,2 +1,9 @@
 .env
 out/
+
+# Tool directories
+.bkit/
+.omc/
+.serena/
+.vscode/
+.context/

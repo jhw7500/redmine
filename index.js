@@ -1,6 +1,8 @@
-// Design Ref: §4.4 — 엔트리포인트 (워크플로 오케스트레이션)
+// Design Ref: §4.4 + §4.6 — 엔트리포인트 (워크플로 오케스트레이션 + 멀티소스 통합)
+const path = require("path");
 const { loadConfig } = require("./lib/config");
 const { collectAll } = require("./lib/collector");
+const { mergeIntoAutoContent } = require("./lib/merger");
 const {
   generate,
   update,
@@ -41,7 +43,14 @@ async function main() {
   // 2. 커밋 수집 + 분류
   const { startDate, endDate } = dateRange(meetingDate);
   console.log(`Collecting commits: ${startDate} ~ ${endDate}`);
-  const autoContent = await collectAll(config, startDate, endDate);
+  // Plan SC: SC-01 — 3개 소스 통합 보고서 생성
+  const gitResult = await collectAll(config, startDate, endDate);
+  const autoContent = mergeIntoAutoContent(
+    gitResult,
+    path.join(config.env.outputDir, "notion-items.json"),
+    path.join(config.env.outputDir, "session-items.json"),
+    config
+  );
 
   // 3. 모드별 실행
   if (config.env.mode === "generate") {
