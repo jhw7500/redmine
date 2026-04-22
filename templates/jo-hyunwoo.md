@@ -11,6 +11,8 @@
 {{PIM_TEST_KO}}
 
 - Wireless Lan
+  - iMX93 BSP
+{{WLAN_BSP_KO}}
   - Application
 {{WLAN_APPLICATION_KO}}
   - Driver

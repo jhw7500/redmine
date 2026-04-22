@@ -1,8 +1,11 @@
 // Design Ref: §4.4 + §4.6 — 엔트리포인트 (워크플로 오케스트레이션 + 멀티소스 통합)
 const path = require("path");
+const fs = require("fs");
 const { loadConfig } = require("./lib/config");
 const { collectAll } = require("./lib/collector");
 const { mergeIntoAutoContent } = require("./lib/merger");
+const { collectAndSave } = require("./lib/collect-notion-api");
+const { collectAndSave: collectSessionAndSave } = require("./lib/collect-session");
 const {
   generate,
   update,
@@ -43,6 +46,28 @@ async function main() {
   // 2. 커밋 수집 + 분류
   const { startDate, endDate } = dateRange(meetingDate);
   console.log(`Collecting commits: ${startDate} ~ ${endDate}`);
+
+  // 2-1. Notion API 수집 (notion-items.json이 없거나 1시간 이상 경과 시)
+  const notionPath = path.join(config.env.outputDir, "notion-items.json");
+  const notionFresh = fs.existsSync(notionPath) &&
+    (Date.now() - fs.statSync(notionPath).mtimeMs) < 3600000;
+  if (!notionFresh && process.env.NOTION_API_KEY) {
+    try {
+      const isoStart = startDate.slice(0, 10);
+      const isoEnd = endDate.slice(0, 10);
+      await collectAndSave(config, isoStart, isoEnd, config.env.outputDir);
+    } catch (err) {
+      console.warn(`[notion-api] Collection failed: ${err.message}`);
+    }
+  }
+
+  // 2-2. 세션 요약 수집 (session-summary.md → session-items.json)
+  try {
+    collectSessionAndSave(config, startDate, endDate, config.env.outputDir);
+  } catch (err) {
+    console.warn(`[session] Collection failed: ${err.message}`);
+  }
+
   // Plan SC: SC-01 — 3개 소스 통합 보고서 생성
   const gitResult = await collectAll(config, startDate, endDate);
   const autoContent = mergeIntoAutoContent(

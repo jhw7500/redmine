@@ -11,7 +11,7 @@
         "pim-check": "pimTest",
         "wlan-driver": "wlanDriver",
         "wlan-driver-v2": "wlanDriver",
-        "wlan-package": "wlanApp",
+        "wlan-package-jhw": "wlanApp",
         "wlan-bridge": "wlanApp",
         "wifi-sniff": "wlanTest",
         "pcap-analyzer": "wlanTest",
@@ -19,7 +19,35 @@
         "automation": "etc",
         "email-mcp": "etc",
         "cts-ta": "etc",
-        "pcap-analyzer": "etc"
+        "pcap-analyzer": "etc",
+        "IMX93": "wlanBsp",
+        "i.MX93": "wlanBsp",
+        "iMX93": "wlanBsp",
+        "커스텀보드": "wlanBsp",
+        "Yocto SDK": "wlanBsp",
+        "USB Gadget": "wlanBsp",
+        "pinctrl": "wlanBsp",
+        "pad config": "wlanBsp",
+        "eMMC 블록": "wlanBsp",
+        "BSP": "wlanBsp",
+        "FX5000": "wlanTest",
+        "pcap AP": "wlanTest",
+        "MCS Rate": "wlanTest",
+        "wifi_link_monitor": "wlanApp",
+        "mcs-tier": "wlanApp",
+        "BOARD_TYPE": "wlanBSP",
+        "BUS_TYPE": "wlanBSP",
+        "switchd": "wlanBSP",
+        "mwifiex": "wlanDriver",
+        "jhw-notion": "etc",
+        "weekly-report": "etc",
+        "세션 요약": "etc",
+        "CLAUDE.md": "etc",
+        "AGENTS.md": "etc",
+        "CARL Rule": "etc",
+        "메모리": "etc",
+        "Yocto 빌드": "wlanBsp",
+        "imx-image": "wlanBsp"
       }
     },
     "session": {
@@ -113,6 +141,7 @@
     "pimDriverCam": { "label": "Camera Driver", "parent": "PIM", "templateKey": "PIM_DRIVER_CAM_KO" },
     "pimDriverSpiToUart": { "label": "SPI-to-UART Driver", "parent": "PIM", "templateKey": "PIM_DRIVER_SPI2UART_KO" },
     "pimTest": { "label": "Test", "parent": "PIM", "templateKey": "PIM_TEST_KO" },
+    "wlanBsp": { "label": "iMX93 BSP", "parent": "Wireless Lan", "templateKey": "WLAN_BSP_KO" },
     "wlanApp": { "label": "Application", "parent": "Wireless Lan", "templateKey": "WLAN_APPLICATION_KO" },
     "wlanDriver": { "label": "Driver", "parent": "Wireless Lan", "templateKey": "WLAN_DRIVER_KO" },
     "wlanTest": { "label": "Test/Analysis", "parent": "Wireless Lan", "templateKey": "WLAN_TEST_KO" },
@@ -120,7 +149,7 @@
   },
   "commitTypes": {
     "feat": {
-      "label": "추가",
+      "label": "구현",
       "conventionalPrefixes": ["feat"],
       "linePatterns": ["^(add|추가|신규|새로|implement|create)\\b"]
     },
@@ -178,5 +207,38 @@
     "outputDir": "out",
     "githubOwner": "jhw7500",
     "claudeCli": "claude"
+  },
+  "reportFilter": {
+    "excludeNotionTitlePatterns": [
+      "^cclog\\b",
+      "^OMC\\b",
+      "HUD\\s*(state|tracking|전환)",
+      "CLAUDE\\.md\\s*(file-split|분리|패턴)",
+      "OMC\\s*Doctor",
+      "AI\\s*프롬프트\\s*\\[Notion\\]\\s*보존",
+      "opencode\\s+gpt-\\d",
+      "세션\\s*요약\\s*\\d{4}-\\d{2}-\\d{2}",
+      "session-summary.*(Notion|저장|파일\\s*누적|로테이트)",
+      "주간보고.*(Notion|수집|키워드|DB\\s*query)",
+      "세션\\s*수집기.*(보충|전용|전략)",
+      "주간보고\\s*v\\d.*세션",
+      "cclog\\s*커맨드"
+    ],
+    "excludeSubsectionPatterns": [
+      "^지식\\s*기록",
+      "^OMC\\s*개선",
+      "^AI\\s*Workspace\\s*운영",
+      "^Knowledge\\s*Base",
+      "^Notion\\s*KB"
+    ],
+    "maxItemsPerSubcategory": 5,
+    "maxItemsPerEtcProject": 4,
+    "aiGuidance": {
+      "hierarchicalGrouping": "한 프로젝트 내에서 3개 이상의 유사 기능 확장이 있으면 상위 1줄(포괄 요약) + 하위 2~3줄(구별되는 축)로 들여쓰기 구성한다. 예: pim-check — '테스트 커버리지 확장' 상위 + 하위에 AWB/ISP/i2c 축.",
+      "stripInternalIds": "B1~B7, D1~D8, E1~E5 같은 내부 작업 ID와 '24+ 커밋' 같은 메타 정보는 제거. 대신 한 줄 포괄 요약으로 대체.",
+      "teamRelevance": "개인 생산성 도구(Claude Code/OMC/cclog/HUD/세션 요약 인프라)와 Notion KB 개인 기술 메모는 제외. 팀에 영향을 주는 결과(기능/버그/개선)만 유지.",
+      "preserveBugDetection": "테스트 프로젝트(pim-check, pcap-analyzer, cts-*)에서 '발견/리포트/확인/해결'한 실제 버그/결함/이슈는 반드시 별도 라인으로 보존한다. 예: 'ch3 ISP 이슈 리포트', 'ch3 이슈 해결 확인'은 '신규 검증 축 추가'로 뭉치지 말고 '카메라 ch3 ISP 버그 검출 및 해결 확인'처럼 결과물로 별도 기재. 테스트 프로젝트의 본질적 가치는 버그 검출이다.",
+      "preserveBugFixes": "모든 프로젝트의 실제 버그 수정(fix:, hotfix:, 'X 문제 수정', 'Y 버그 해결')은 반드시 보존. 기능 추가와 혼동 합치지 말 것."
+    }
   }
 }
