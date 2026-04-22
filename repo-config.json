@@ -84,7 +84,8 @@
     },
     "pim-check": {
       "path": "/home/jhw/ai/opencode/projects/pim-check",
-      "category": "pimTest"
+      "category": "pimTest",
+      "includeCommitBody": true
     },
     "wlan-package": {
       "path": "/home/jhw/ai/opencode/projects/wlan-package",
@@ -237,8 +238,10 @@
       "hierarchicalGrouping": "한 프로젝트 내에서 3개 이상의 유사 기능 확장이 있으면 상위 1줄(포괄 요약) + 하위 2~3줄(구별되는 축)로 들여쓰기 구성한다. 예: pim-check — '테스트 커버리지 확장' 상위 + 하위에 AWB/ISP/i2c 축.",
       "stripInternalIds": "B1~B7, D1~D8, E1~E5 같은 내부 작업 ID와 '24+ 커밋' 같은 메타 정보는 제거. 대신 한 줄 포괄 요약으로 대체.",
       "teamRelevance": "개인 생산성 도구(Claude Code/OMC/cclog/HUD/세션 요약 인프라)와 Notion KB 개인 기술 메모는 제외. 팀에 영향을 주는 결과(기능/버그/개선)만 유지.",
-      "preserveBugDetection": "테스트 프로젝트(pim-check, pcap-analyzer, cts-*)에서 '발견/리포트/확인/해결'한 실제 버그/결함/이슈는 반드시 별도 라인으로 보존한다. 예: 'ch3 ISP 이슈 리포트', 'ch3 이슈 해결 확인'은 '신규 검증 축 추가'로 뭉치지 말고 '카메라 ch3 ISP 버그 검출 및 해결 확인'처럼 결과물로 별도 기재. 테스트 프로젝트의 본질적 가치는 버그 검출이다.",
-      "preserveBugFixes": "모든 프로젝트의 실제 버그 수정(fix:, hotfix:, 'X 문제 수정', 'Y 버그 해결')은 반드시 보존. 기능 추가와 혼동 합치지 말 것."
+      "preserveBugDetection": "pim-check는 **검출자**. 실제 수정은 드라이버/앱에서 일어난다는 사실을 반드시 반영한다. 상위 1줄은 'pim-check 검출: [버그 요지] ([수정 위치]로 해결)' 형식. 하위는 **증상/원인/결과** 3필드 순서로 제공한다 (수정 필드는 별도로 두지 말고 상위 header 괄호에 녹여라). 각 필드는 라벨로 시작(증상:/원인:/결과:). 예시 구조:\n상위 'pim-check 검출: ch3 단독 활성 시 AP1302 ISP 단일모드 레지스터 미반영 (max9296 드라이버 + gstApp 수정으로 해결)'\n  - 증상: ROTATION 0x0002 기대/실측 0x0000, AE_CTRL MANUAL 기대/실측 AUTO (720p·fhd × vflip_on·ae_off 4건 FAIL)\n  - 원인: max9296.c single mode 쓰기 경로에서 ch2 값이 ch3 위치에 덮어씀\n  - 결과: run_comprehensive_verify.py 96/96 PASS (Quad 32 + Dual 64)\n단, pcap-analyzer/cts-* 같은 일반 수정은 본 규칙 대상 아님.",
+      "aggressiveWirelessLanSummary": "Wireless Lan 섹션은 줄 수가 가장 비대해지기 쉬우므로 공격적으로 축약한다. Driver는 moal_bridge 관련 20+ 커밋이 쏟아지는데, 상위 1줄 'moal_bridge 안정성/성능 하드닝' + 하위 2줄(안정성축 한 줄, 성능축 한 줄)로 압축. Application도 systemd/JSON/바이너리/모니터링 축으로 묶어 4줄 이하 유지. 개별 레지스터 값·하위 ID(B1~E5)·단일 설정 이름을 열거하지 말고 축 단위 포괄 요약. 동일 프로젝트(wlan-package/wlan-driver/wlan-bridge)의 세부 작업은 '정비/하드닝/분리/모니터링'처럼 테마별로 뭉치되 그 안에서 구체 메커니즘 1~2개만 예시로 괄호 안에 남겨라.",
+      "noCommitTypeLabels": "출력에 '구현/수정/리팩토링/문서/기타' 같은 commit 타입 라벨은 **절대 쓰지 마라**. 같은 프로젝트 내 여러 타입 항목은 자연스러운 한 줄 문장으로 배치한다. 예: 라벨 없이 'wifi.sh jq // true 버그 수정'을 다른 구현 항목과 같은 레벨 bullet으로. 서브그룹 들여쓰기는 계층 그룹핑(상위 포괄+하위 축) 용도에만 사용.",
+      "preferBrevity": "v1 결과(44줄 수준)의 간결함이 기본값. 버그 검출 결과 보존으로 인한 추가 줄은 허용하되, 다른 카테고리 줄 수는 반드시 v1 이하 수준 유지. 같은 프로젝트 5줄 이상이면 계층 그룹핑 또는 문장 통합으로 반드시 축소."
     }
   }
 }
