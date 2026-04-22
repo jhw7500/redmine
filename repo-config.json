@@ -19,7 +19,6 @@
         "automation": "etc",
         "email-mcp": "etc",
         "cts-ta": "etc",
-        "pcap-analyzer": "etc",
         "IMX93": "wlanBsp",
         "i.MX93": "wlanBsp",
         "iMX93": "wlanBsp",
@@ -35,9 +34,9 @@
         "MCS Rate": "wlanTest",
         "wifi_link_monitor": "wlanApp",
         "mcs-tier": "wlanApp",
-        "BOARD_TYPE": "wlanBSP",
-        "BUS_TYPE": "wlanBSP",
-        "switchd": "wlanBSP",
+        "BOARD_TYPE": "wlanApp",
+        "BUS_TYPE": "wlanApp",
+        "switchd": "wlanApp",
         "mwifiex": "wlanDriver",
         "jhw-notion": "etc",
         "weekly-report": "etc",
@@ -46,8 +45,7 @@
         "AGENTS.md": "etc",
         "CARL Rule": "etc",
         "메모리": "etc",
-        "Yocto 빌드": "wlanBsp",
-        "imx-image": "wlanBsp"
+        "Yocto 빌드": "wlanBsp"
       }
     },
     "session": {
@@ -64,10 +62,6 @@
   "repos": {
     "gstApp": {
       "path": "/home/jhw/ai/opencode/projects/gstApp",
-      "category": "pimApp"
-    },
-    "streamApp": {
-      "path": "/home/jhw/ai/opencode/projects/streamApp",
       "category": "pimApp"
     },
     "pim-package-jhw": {
@@ -96,10 +90,6 @@
       "category": "wlanApp"
     },
     "wlan-driver": {
-      "path": "/home/jhw/ai/opencode/projects/wlan-driver",
-      "category": "wlanDriver"
-    },
-    "mwifiex_6.2": {
       "path": "/home/jhw/ai/opencode/projects/wlan-driver-v2",
       "category": "wlanDriver"
     },
@@ -135,6 +125,11 @@
       "path": "/home/jhw/ai/opencode/projects/jhw-notion",
       "category": "etc",
       "displayName": "Notion MCP 서버"
+    },
+    "personal-ops": {
+      "path": "/home/jhw/ai/opencode/projects/personal-ops",
+      "category": "etc",
+      "displayName": "개인 자동화 스크립트"
     }
   },
   "categories": {
