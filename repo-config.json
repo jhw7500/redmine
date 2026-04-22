@@ -141,7 +141,7 @@
     "pimApp": { "label": "Application", "parent": "PIM", "templateKey": "PIM_APPLICATION_KO" },
     "pimDriverCam": { "label": "Camera Driver", "parent": "PIM", "templateKey": "PIM_DRIVER_CAM_KO" },
     "pimDriverSpiToUart": { "label": "SPI-to-UART Driver", "parent": "PIM", "templateKey": "PIM_DRIVER_SPI2UART_KO" },
-    "pimTest": { "label": "Test", "parent": "PIM", "templateKey": "PIM_TEST_KO" },
+    "pimTest": { "label": "Test/Analysis", "parent": "PIM", "templateKey": "PIM_TEST_KO" },
     "wlanBsp": { "label": "iMX93 BSP", "parent": "Wireless Lan", "templateKey": "WLAN_BSP_KO" },
     "wlanApp": { "label": "Application", "parent": "Wireless Lan", "templateKey": "WLAN_APPLICATION_KO" },
     "wlanDriver": { "label": "Driver", "parent": "Wireless Lan", "templateKey": "WLAN_DRIVER_KO" },
@@ -223,7 +223,15 @@
       "주간보고.*(Notion|수집|키워드|DB\\s*query)",
       "세션\\s*수집기.*(보충|전용|전략)",
       "주간보고\\s*v\\d.*세션",
-      "cclog\\s*커맨드"
+      "cclog\\s*커맨드",
+      "역할\\s*(구분|정리|이해|파악)\\s*$",
+      "역할\\s*(구분|정리)\\s*[,\\.;]?\\s",
+      "vs\\s+\\w+.*역할\\s*구분",
+      "DEAD\\s*key\\s*$",
+      "DEAD\\s*key\\b",
+      "분기\\s*로직\\s*\\([^)]*\\)\\s*$",
+      "event_auto_remove",
+      "^pim-package:\\s*(evt_copy_delay|ord\\s|ord_vcm_conf)"
     ],
     "excludeSubsectionPatterns": [
       "^지식\\s*기록",
@@ -241,7 +249,12 @@
       "preserveBugDetection": "pim-check는 **검출자**. 실제 수정은 드라이버/앱에서 일어난다는 사실을 반드시 반영한다. 상위 1줄은 'pim-check 검출: [버그 요지] ([수정 위치]로 해결)' 형식. 하위는 **증상/원인/결과** 3필드 순서로 제공한다 (수정 필드는 별도로 두지 말고 상위 header 괄호에 녹여라). 각 필드는 라벨로 시작(증상:/원인:/결과:). 예시 구조:\n상위 'pim-check 검출: ch3 단독 활성 시 AP1302 ISP 단일모드 레지스터 미반영 (max9296 드라이버 + gstApp 수정으로 해결)'\n  - 증상: ROTATION 0x0002 기대/실측 0x0000, AE_CTRL MANUAL 기대/실측 AUTO (720p·fhd × vflip_on·ae_off 4건 FAIL)\n  - 원인: max9296.c single mode 쓰기 경로에서 ch2 값이 ch3 위치에 덮어씀\n  - 결과: run_comprehensive_verify.py 96/96 PASS (Quad 32 + Dual 64)\n단, pcap-analyzer/cts-* 같은 일반 수정은 본 규칙 대상 아님.",
       "aggressiveWirelessLanSummary": "Wireless Lan 섹션은 줄 수가 가장 비대해지기 쉬우므로 공격적으로 축약한다. Driver는 moal_bridge 관련 20+ 커밋이 쏟아지는데, 상위 1줄 'moal_bridge 안정성/성능 하드닝' + 하위 2줄(안정성축 한 줄, 성능축 한 줄)로 압축. Application도 systemd/JSON/바이너리/모니터링 축으로 묶어 4줄 이하 유지. 개별 레지스터 값·하위 ID(B1~E5)·단일 설정 이름을 열거하지 말고 축 단위 포괄 요약. 동일 프로젝트(wlan-package/wlan-driver/wlan-bridge)의 세부 작업은 '정비/하드닝/분리/모니터링'처럼 테마별로 뭉치되 그 안에서 구체 메커니즘 1~2개만 예시로 괄호 안에 남겨라.",
       "noCommitTypeLabels": "출력에 '구현/수정/리팩토링/문서/기타' 같은 commit 타입 라벨은 **절대 쓰지 마라**. 같은 프로젝트 내 여러 타입 항목은 자연스러운 한 줄 문장으로 배치한다. 예: 라벨 없이 'wifi.sh jq // true 버그 수정'을 다른 구현 항목과 같은 레벨 bullet으로. 서브그룹 들여쓰기는 계층 그룹핑(상위 포괄+하위 축) 용도에만 사용.",
-      "preferBrevity": "v1 결과(44줄 수준)의 간결함이 기본값. 버그 검출 결과 보존으로 인한 추가 줄은 허용하되, 다른 카테고리 줄 수는 반드시 v1 이하 수준 유지. 같은 프로젝트 5줄 이상이면 계층 그룹핑 또는 문장 통합으로 반드시 축소."
+      "preferBrevity": "v1 결과(44줄 수준)의 간결함이 기본값. 버그 검출 결과 보존으로 인한 추가 줄은 허용하되, 다른 카테고리 줄 수는 반드시 v1 이하 수준 유지. 같은 프로젝트 5줄 이상이면 계층 그룹핑 또는 문장 통합으로 반드시 축소.",
+      "mandatorySections": "원본 입력(rawContent)에서 어떤 서브카테고리 아래에 **1줄이라도 내용이 있으면** 그 서브카테고리 헤더와 내용은 **절대 삭제 금지**. 특히 'iMX93 BSP', 'Camera Driver', 'SPI-to-UART Driver', 'PIM > Application', 'Wireless Lan > iMX93 BSP'는 자주 누락되므로 최우선 보존. 내용이 애매해도 최소 1줄로 요약하여 보존. 섹션 헤더는 원본 template 계층을 그대로 따를 것.",
+      "avoidFeatureVerbosity": "버그 섹션(증상/원인/결과)이 아닌 일반 기능/개선 항목은 간결 우선. 숫자 나열(70 케이스, 6축 등), 파일명(run_comprehensive_verify.py 같은), 내부 ID(B1~E5, IA-M10 등), '총 X분' 같은 실행 시간 수치는 **제거**하고 결과만 한 줄로. 예: '멀티축 자동화 테스트 커버리지 확장 (수십→96+ 시나리오, 96/96 PASS)'는 수용 가능하나, 'schema 확장(6개 신규 축·70 케이스 자동생성)' 같은 세부는 생략.",
+      "strictCategoryMapping": "다음 repo/프로젝트는 반드시 지정된 카테고리 하위에 배치한다. 이 규칙 위반 금지. pcap-analyzer → 'Wireless Lan > Test/Analysis'(ETC 금지). cts-ta-mcp-server/HiWorks 근태 관리 → 'ETC'. cts-email-mcp-server → 'ETC'. jhw-notion/Notion MCP → 'ETC'. redmine 주간 보고 자동화 → 'ETC'. automation/CI/CD → 'ETC'. pim-package/pim-check/max9296 등 PIM 프로젝트 → 'PIM' 하위. wlan-package/wlan-driver/wlan-bridge/wpa-supplicant/mlanutl → 'Wireless Lan' 하위. 모호하면 절대 ETC로 보내지 말고 입력 섹션 위치를 따를 것.",
+      "headerReuseBan": "섹션 헤더('moal_bridge 안정성/성능 하드닝' 같은 상위 라인)를 다른 서브카테고리에서 재사용하지 마라. 'moal_bridge' 관련 하드닝 헤더는 오직 'Wireless Lan > Driver' 아래에서만 사용한다. 'Wireless Lan > Application'에는 wifi_init/wifi_services/systemd/JSON 관련 헤더만 허용. 각 서브카테고리의 기능 성격에 맞는 고유 상위 라인을 작성하라.",
+      "themeBasedGrouping": "각 서브카테고리(특히 WLAN Application/Driver, pcap-analyzer) 아래 flat 나열 대신 **비전문가도 이해 가능한 1~3개의 상위 테마**로 묶고 하위에 구체 변경 2~4줄을 배치하라. 테마 이름은 파일명/CLI/API 이름이 아니라 **기능·목적 중심**으로 작성 — 예: '시스템 안정화', '진단·디버깅 도구 강화', '보안·데이터 안전성 강화', '설정 관리 단일화', 'CLI 제어성 개선', '패키지/빌드 파이프라인 정비'. 테마 이름은 AI가 컨텍스트에 맞춰 더 적절한 것으로 자유롭게 작명. **중요: 서브카테고리당 테마는 최대 3개. 성격이 유사한 테마는 반드시 통합하라**. 예를 들어 '시스템 데몬 안정화' + '부팅 안정성·버그 수정'은 모두 '안정성 확보'가 목적이므로 **'시스템 안정화' 하나로 병합**. '안정화/안정성/복구' 같은 동류 테마는 쪼개지 말고 하나로. 버그 수정도 독립 테마가 아니라 관련 테마 안에 포함시켜라 (기능 버그→해당 기능 테마, 시스템 버그→시스템 안정화 테마). 예시 변환:\nBefore (테마 과세분화):\n  - Application\n    - 시스템 데몬 안정화\n      - wifi_init 3-phase 분리\n      - wifi-stack.target 분리\n    - 설정 관리 단일화\n      - JSON enable 키 per-iface 통합\n    - 부팅 안정성·버그 수정\n      - reboot 3단계 폴백\n      - multi-user.target 블로킹 해소\n      - jq // 버그 수정\nAfter (3테마 이하로 통합):\n  - Application\n    - 시스템 안정화\n      - wifi_init 3-phase 라이프사이클 분리 + PartOf 자동 stop 전파\n      - wifi-stack.target 분리, reboot 3단계 폴백 + networkctl reload로 eth0 보호\n      - multi-user.target 블로킹 해소(로그인 지연) 및 jq // false-falsey 버그 수정\n    - 설정 관리 단일화\n      - JSON 데몬 enable 키 per-iface 통합 (단일 진실 원칙)\n      - wbridge 설정 구조화(v0.3.0), rate_adapt/mcs_tier per-iface override\n    - 진단·디버깅 도구 강화\n      - wifi_link_monitor IRQ(WLAN/ETH) 추적 + moal_bridge stats 모니터링\n2줄 이하인 서브카테고리는 테마 없이 flat 유지 허용. 버그 섹션(증상/원인/결과)과 pim-check 버그 항목은 기존 포맷 유지."
     }
   }
 }

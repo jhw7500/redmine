@@ -7,7 +7,7 @@
 {{PIM_DRIVER_CAM_KO}}
   - SPI-to-UART Driver
 {{PIM_DRIVER_SPI2UART_KO}}
-  - Test
+  - Test/Analysis
 {{PIM_TEST_KO}}
 
 - Wireless Lan
