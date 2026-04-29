@@ -47,18 +47,17 @@ async function main() {
   const { startDate, endDate } = dateRange(meetingDate);
   console.log(`Collecting commits: ${startDate} ~ ${endDate}`);
 
-  // 2-1. Notion API 수집 (notion-items.json이 없거나 1시간 이상 경과 시)
-  const notionPath = path.join(config.env.outputDir, "notion-items.json");
-  const notionFresh = fs.existsSync(notionPath) &&
-    (Date.now() - fs.statSync(notionPath).mtimeMs) < 3600000;
-  if (!notionFresh && process.env.NOTION_API_KEY) {
+  // 2-1. Notion API 수집 — 매 실행마다 새로 수집 (freshness 체크는 stale 캐시 위험을 키움)
+  const isoStart = startDate.slice(0, 10);
+  const isoEnd = endDate.slice(0, 10);
+  if (process.env.NOTION_API_KEY) {
     try {
-      const isoStart = startDate.slice(0, 10);
-      const isoEnd = endDate.slice(0, 10);
       await collectAndSave(config, isoStart, isoEnd, config.env.outputDir);
     } catch (err) {
       console.warn(`[notion-api] Collection failed: ${err.message}`);
     }
+  } else {
+    console.warn("[notion-api] NOTION_API_KEY not set, skipping collection");
   }
 
   // 2-2. 세션 요약 수집 (session-summary.md → session-items.json)
@@ -74,7 +73,8 @@ async function main() {
     gitResult,
     path.join(config.env.outputDir, "notion-items.json"),
     path.join(config.env.outputDir, "session-items.json"),
-    config
+    config,
+    { start: isoStart, end: isoEnd }
   );
 
   // 3. 모드별 실행
