@@ -4,6 +4,13 @@
     "notion": {
       "enabled": true,
       "databases": ["Projects", "Knowledge Base"],
+      "searchKeywords": ["iMX93", "wlan", "pim", "pcap", "sc16is7xx", "redmine", "email", "jhw-notion", "automation"],
+      "excludePatterns": [
+        "^(AI Workspace|Knowledge Base|Projects|References|Decision Log|내 작업)$",
+        "^(Claude Code|oh-my-claudecode|bkit|compound-engineering|superpowers|비-플러그인|claude-code-settings)",
+        "^(독립 작업|롤백 가능|응답 끝에|Notion 저장|폐기|Notion Workflow)",
+        "^(figma|linear|playwright|episodic-memory|codex|coderabbit)"
+      ],
       "projectMapping": {
         "pim-check": "pimTest",
         "max9296": "pimDriverCam",
