@@ -282,8 +282,8 @@
   ],
   "defaults": {
     "baseUrl": "http://192.168.10.2:30002",
-    "projectId": "team-4-weekly-meeting",
-    "pageSuffix": "개발4팀_주간_회의",
+    "projectId": "advance-development-team",
+    "pageSuffix": "선행개발팀_주간_회의",
     "sectionHeader": "#### <span style=\"color:blue\">조현우</span>",
     "outputDir": "out",
     "githubOwner": "jhw7500",
