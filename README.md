@@ -23,6 +23,7 @@ Optional env vars
 - `OUTPUT_DIR` (default: /home/jhw/ai/codex/redmine-auto/out)
 - `OUTPUT_PATH` (default: OUTPUT_DIR/jo-hyunwoo-YYYY-MM-DD.md)
 - `MODE` (default: generate, set to update to push to Redmine)
+- `REPORT_DEPTH` (default: 2 — 보고서 상세도. 1=요약, 2=표준, 3=상세. repo-config.json `defaults.reportDepth`/`depthProfiles` 참조)
 - `AI_EN_PATH` (default: /home/jhw/ai/codex/redmine-auto/templates/ai-en.md)
 - `AI_KO_PATH` (default: /home/jhw/ai/codex/redmine-auto/templates/ai-ko.md)
 - `GITHUB_TOKEN` (optional: enables PR title lookup)
@@ -45,6 +46,7 @@ Notes
 Run
 - Draft only (write file): `MODE=generate node redmine-auto/update-jo-hyunwoo.api.js`
 - Update from file: `MODE=update node redmine-auto/update-jo-hyunwoo.api.js`
+- Depth 비교 테스트: `./run-depth-test.sh` — 1회 수집으로 depth 1/2/3 요약을 `out/jo-hyunwoo-YYYY-MM-DD.depthN.md`에 생성 (원본 보고서는 유지)
 
 Approval flow
 - The script prints the current section content and the updated section content, then asks for confirmation.
