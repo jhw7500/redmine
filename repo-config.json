@@ -287,7 +287,22 @@
     "sectionHeader": "#### <span style=\"color:blue\">조현우</span>",
     "outputDir": "out",
     "githubOwner": "jhw7500",
-    "claudeCli": "claude"
+    "claudeCli": "claude",
+    "reportDepth": 2
+  },
+  "depthProfiles": {
+    "1": {
+      "label": "요약",
+      "promptGuidance": "보고서를 임원 보고 수준으로 압축한다.\n- 들여쓰기 최대 2단: `- 카테고리(PIM/Wireless Lan/ETC)` > `  - 핵심 항목`. 3단 이상 들여쓰기 절대 금지.\n- 서브카테고리 헤더(Application/Camera Driver/iMX93 BSP 등)는 출력하지 않는다 — 필요하면 항목 문장 안에 자연스럽게 녹인다.\n- 카테고리당 최대 5줄. 그 주의 대표 성과만 남기고 나머지는 과감히 생략한다.\n- 괄호 부연 금지. 꼭 필요한 모델명/기술명 1개만 예외 허용.\n- 한 줄은 '무엇을 했고 어떤 결과인지'가 보이는 완결 문장 1개로 쓴다.\n- 테스트 프로젝트의 버그 검출 결과도 상위 1줄로만 요약한다 (증상/원인/결과 하위 bullet 금지).\n- ETC는 팀 공유 가치가 있는 항목만 최대 3줄."
+    },
+    "2": {
+      "label": "표준",
+      "promptGuidance": "- 들여쓰기 최대 3단: 카테고리 > 서브카테고리 > 항목 1줄. 4단(항목 아래 세부 bullet) 금지 — 꼭 필요한 세부는 상위 줄의 괄호 1개로 흡수한다.\n- 서브카테고리당 최대 3줄 (테스트 프로젝트의 버그 검출 결과는 예외).\n- 괄호 부연은 줄당 1개, 짧게(대략 15자 이내). 수치·파일명·내부 경로·레지스터 주소는 생략한다.\n- 버그 검출 결과는 상위 1줄 + 증상/원인/결과 각 1줄 이내로 압축 유지.\n- 유사 항목은 한 줄로 통합하되 서로 다른 기능/모듈은 합치지 않는다."
+    },
+    "3": {
+      "label": "상세",
+      "promptGuidance": ""
+    }
   },
   "reportFilter": {
     "excludeNotionTitlePatterns": [
