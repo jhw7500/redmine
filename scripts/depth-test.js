@@ -24,6 +24,7 @@ const {
 const DEPTHS = [1, 2, 3];
 
 // 출력의 bullet 최대 들여쓰기 단계 (비교 지표용)
+// 2칸 들여쓰기 기준 — AI 출력은 원본 보고서 포맷(2칸)을 따른다는 가정. 탭/4칸이면 부정확.
 function maxIndentLevel(text) {
   let max = 0;
   for (const line of text.split("\n")) {
@@ -99,6 +100,7 @@ async function main() {
       results.push({ depth, ok: false, outPath: "-", lines: 0, indent: 0 });
       continue;
     }
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
     fs.writeFileSync(outPath, summarized, "utf8");
     results.push({
       depth,
