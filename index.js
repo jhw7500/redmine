@@ -43,6 +43,13 @@ async function main() {
   console.log(`Meeting date: ${formatDate(meetingDate)}`);
   console.log(`Mode: ${config.env.mode}`);
 
+  // [publish 순수화] update(올리기)는 generate가 만든 초안 파일만 읽어 올린다.
+  // 커밋/Notion/세션 수집과 AI 요약은 generate 전용 — update에서는 건너뛴다.
+  if (config.env.mode === "update") {
+    await update(config, meetingDate, null);
+    return;
+  }
+
   // 2. 커밋 수집 + 분류
   const { startDate, endDate } = dateRange(meetingDate);
   console.log(`Collecting commits: ${startDate} ~ ${endDate}`);
@@ -77,12 +84,10 @@ async function main() {
     { start: isoStart, end: isoEnd }
   );
 
-  // 3. 모드별 실행
+  // 3. generate 모드 실행 (update는 위에서 파일만 읽어 처리 후 반환됨)
   if (config.env.mode === "generate") {
     const outputPath = await generate(config, meetingDate, autoContent);
     console.log(`Generated: ${outputPath}`);
-  } else if (config.env.mode === "update") {
-    await update(config, meetingDate, autoContent);
   } else {
     console.error(`Unknown MODE: ${config.env.mode}. Use 'generate' or 'update'.`);
     process.exit(1);
