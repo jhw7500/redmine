@@ -46,7 +46,7 @@ async function main() {
   // [publish 순수화] update(올리기)는 generate가 만든 초안 파일만 읽어 올린다.
   // 커밋/Notion/세션 수집과 AI 요약은 generate 전용 — update에서는 건너뛴다.
   if (config.env.mode === "update") {
-    await update(config, meetingDate, null);
+    await update(config, meetingDate);
     return;
   }
 
