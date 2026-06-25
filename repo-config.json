@@ -351,6 +351,11 @@
     ],
     "maxItemsPerSubcategory": 50,
     "maxItemsPerEtcProject": 30,
+    "leaderHighlight": {
+      "enabled": true,
+      "maxLines": 0,
+      "guidance": ""
+    },
     "aiGuidance": {
       "hierarchicalGrouping": "한 프로젝트 내에서 3개 이상의 유사 기능 확장이 있으면 상위 1줄(포괄 요약) + 하위 2~3줄(구별되는 축)로 들여쓰기 구성한다. 예: pim-check — '테스트 커버리지 확장' 상위 + 하위에 AWB/ISP/i2c 축.",
       "stripInternalIds": "B1~B7, D1~D8, E1~E5 같은 내부 작업 ID와 '24+ 커밋' 같은 메타 정보는 제거. 대신 한 줄 포괄 요약으로 대체.",

@@ -24,6 +24,8 @@ Optional env vars
 - `OUTPUT_PATH` (default: OUTPUT_DIR/jo-hyunwoo-YYYY-MM-DD.md)
 - `MODE` (default: generate, set to update to push to Redmine)
 - `REPORT_DEPTH` (default: 2 — 보고서 상세도. 1=요약, 2=표준, 3=상세. repo-config.json `defaults.reportDepth`/`depthProfiles` 참조)
+- `LEADER_HIGHLIGHT` (default: 0 — 팀장 회의 보고용 중요 항목 밑줄(`<u>`) 강조. 1=사용. repo-config.json `reportFilter.leaderHighlight.enabled`보다 우선)
+- `LEADER_HIGHLIGHT_MAX` (default: 0 = 무제한 — 밑줄 최대 줄 수. N>0이면 AI에 상한 지시. repo-config.json `reportFilter.leaderHighlight.maxLines`보다 우선)
 - `AI_EN_PATH` (default: /home/jhw/ai/codex/redmine-auto/templates/ai-en.md)
 - `AI_KO_PATH` (default: /home/jhw/ai/codex/redmine-auto/templates/ai-ko.md)
 - `GITHUB_TOKEN` (optional: enables PR title lookup)
