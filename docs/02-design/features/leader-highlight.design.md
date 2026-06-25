@@ -51,7 +51,7 @@ repo-config.json ──┐
 ### 3.2 lib/config.js
 - `reportFilter.leaderHighlight` 로드. 우선순위: **env > repo-config > 디폴트**.
   - `enabled`: `LEADER_HIGHLIGHT`(=1 true / 그 외 false) → `leaderHighlight.enabled === true` → false.
-  - `maxLines`: `LEADER_HIGHLIGHT_MAX`(정수) → `leaderHighlight.maxLines` → 0(무제한). `Math.max(0, …)`로 음수/비정상은 0으로 정규화.
+  - `maxLines`: `LEADER_HIGHLIGHT_MAX` → `leaderHighlight.maxLines` → 0(무제한). env·config **양쪽 모두 `parseInt`로 정수화** + `Math.max(0, …)` — 소수(`3.7`→`3`)·음수·비정상은 0/절사로 정규화.
 
 ### 3.3 lib/publisher.js
 - `buildLeaderHighlightGuidance(config)` 신설:
@@ -60,22 +60,28 @@ repo-config.json ──┐
   - `maxLines>0`이면 "최대 N줄" 상한 문구, `0`이면 "상한 없음 + 절제" 문구.
 - `buildFilterGuidance()` 끝에 `${highlightBlock}` 추가 (off면 빈 문자열이라 무영향).
 - exports에 `buildFilterGuidance`, `buildLeaderHighlightGuidance` 추가(테스트용).
+- `generate()`: AI 요약 직후 `<u>`/`</u>` 개수 불일치 시 경고 로그 — LLM이 태그를 안 닫아 위키 렌더가 깨지는 것을 사람이 검토하도록 유도(경고만, 차단 아님).
 
 ### 3.4 README.md
 - Optional env vars에 `LEADER_HIGHLIGHT`, `LEADER_HIGHLIGHT_MAX` 추가.
+
+### 3.5 scripts/leader-highlight-test.js (신규)
+- AI/네트워크 호출 없이 config 로드 + 프롬프트 빌더를 검증하는 단위 테스트. 실행: `node scripts/leader-highlight-test.js`.
+- 커버: `buildLeaderHighlightGuidance`(off/on/maxLines/guidance string·non-string), `buildFilterGuidance` 주입, config env 오버라이드, repo-config maxLines 정규화(임시 수정·`try/finally` 원복).
 
 ## 4. 에러 처리 / 호환
 - **옵션 미설정**(repo-config에 `leaderHighlight` 키 없음): `enabled=false, maxLines=0` → 기존 동작과 바이트 동일(회귀 없음).
 - **AI 요약 실패(null)**: `aiSummarize`가 null → `rawSection` 폴백 → 밑줄 없는 원본.
 - **구조 검증 게이트**(파란 헤더/`sectionHeader` 카운트), `stripAstralChars`: `<u>`와 무관 → 영향 없음.
 - **발행(update)**: generate가 만든 초안 파일을 그대로 PUT → 밑줄도 사람이 검토·수정 가능(기존 워크플로우 일관).
+- **`<u>` 태그 불균형**: AI 출력의 `<u>`/`</u>` 개수가 다르면 `generate()`가 경고 로그를 남긴다(차단하지 않으므로 사람이 초안에서 수정 가능).
 
 ## 5. 테스트 계획 / 결과
 1. 정적: `node --check` (config.js / publisher.js), repo-config.json JSON 파싱 — **통과**.
-2. config 단위: env 미설정/=1/=0 × `MAX` 미설정/=3 → `leaderHighlight` 기대값 — **통과**.
+2. 단위 테스트: `node scripts/leader-highlight-test.js` — config env/repo-config 오버라이드·maxLines 정규화·프롬프트 빌더·주입·guidance non-string 방어 일괄 검증 — **통과**.
 3. 프롬프트 회귀: `enabled=false`에서 `buildLeaderHighlightGuidance()===""` + `buildFilterGuidance`에 섹션 없음 — **통과**.
 4. 주입 확인: `enabled=true`에서 `<u>`·상한 문구·섹션 헤더 포함 — **통과**.
-5. E2E(선택): `LEADER_HIGHLIGHT=1 MODE=generate` 실제 실행 → `out/*.md`에서 `<u>` 위치 육안 확인(위키 PUT 없이). claude CLI 호출 필요 — 미실행.
+5. E2E: `LEADER_HIGHLIGHT=1 MODE=generate` 실제 실행 → `out/jo-hyunwoo-2026-07-01.md` 생성, 절제되게 2곳(성과 1·의사결정 1) 대표 줄에 `<u>` 밑줄, 열림/닫힘 짝 정확, 위키 미반영 — **실행 완료(2026-06-25)**.
 
 ## 6. 범위 외 (YAGNI)
 - 상한 hard 강제(후처리 `<u>` 절단) — 필요 확인 시 후속.
