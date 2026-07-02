@@ -86,7 +86,25 @@ async function main() {
 
   // 3. generate 모드 실행 (update는 위에서 파일만 읽어 처리 후 반환됨)
   if (config.env.mode === "generate") {
-    const outputPath = await generate(config, meetingDate, autoContent);
+    // 발표노트(KB tag=발표노트) → Redmine 작업(Issue) 자동 등록. depth3 발행분에서만.
+    let noteRefs = [];
+    if (Number(config.env.reportDepth) === 3 && process.env.NOTION_API_KEY) {
+      try {
+        const { queryPresentationNotes, publishNotes } = require("./lib/notion-issue-publisher");
+        const issueEnv = {
+          redmineBase: config.env.baseUrl,
+          redmineKey: config.env.apiKey,
+          notionKey: process.env.NOTION_API_KEY,
+          projectIdentifier: config.env.projectId,
+        };
+        const notes = await queryPresentationNotes(issueEnv, isoStart, isoEnd);
+        noteRefs = await publishNotes(issueEnv, notes, {});
+        console.log(`[issue] presentation notes: ${noteRefs.length}`);
+      } catch (err) {
+        console.warn(`[issue] publishNotes failed: ${err.message}`);
+      }
+    }
+    const outputPath = await generate(config, meetingDate, autoContent, noteRefs);
     console.log(`Generated: ${outputPath}`);
   } else {
     console.error(`Unknown MODE: ${config.env.mode}. Use 'generate' or 'update'.`);
