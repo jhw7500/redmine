@@ -23,6 +23,20 @@
 2. 여전히 미해결이면 **as-of 날짜**를 붙인다 — `(YYYY-MM-DD 기준 미해결)`. 날짜 없는 "미해결"은 금지(stale 여부 판별 불가).
 3. 이미 해결됐으면 이슈가 아니라 **완료 항목**으로 옮기고 수정 커밋(해시)을 명시한다.
 
+## 발표노트 → Redmine 작업(Issue) 자동 등록
+
+Notion KB 항목의 `tags`에 **`발표노트`** 를 붙이면, 주간 보고(depth3 generate)에서 해당 노트가
+Redmine `advance-development-team` 프로젝트의 **작업(Issue)**으로 자동 등록되고, 조현우 섹션 말미
+`**발표노트(상세)**` 블록에 `#이슈번호`로 링크된다.
+
+- 대상: KB 항목 중 `발표노트` 태그 + 보고 기간(created_time) 내.
+- 본문: Notion 페이지 전체를 Markdown으로 변환해 이슈 설명에 수록.
+- 중복방지: 이슈 설명의 `Notion-Page-Id: <id>` 마커로 조회 → 있으면 재사용(재생성 안 함).
+- 트래커: 프로젝트 활성 트래커 중 선호순(`새기능`→`검토`), 상태 `검토`, 담당 본인.
+- 수동 실행/파일럿: `node lib/notion-issue-publisher.js --page <notionPageId> [--dry-run]`
+  또는 `--start YYYY-MM-DD --end YYYY-MM-DD`.
+- 설계/계획: `docs/superpowers/specs|plans/2026-07-02-*presentation-note-issue*`.
+
 ## (참고) 후속 대책 — 다른 repo, 별도 적용 필요
 
 - **personal-ops `session-summary.sh`**: "### 미완료 항목"에 resolution back-link 추적 — 직전 미완료 항목이 후속 커밋으로 닫히면 다음 요약에 `[resolved by <commit>]` 표기. → 1번 규칙의 수작업 대조를 데이터 소스 단에서 줄임.
