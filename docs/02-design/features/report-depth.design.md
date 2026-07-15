@@ -2,17 +2,17 @@
 
 > 작성: 2026-06-10 | 상태: 승인됨 (접근 방식 A — 프롬프트 프로파일)
 > 배경: 현재 보고서가 bullet 최대 4단 중첩 + 괄호 부연 과다로 너무 디테일함.
-> 목표: 뎁스를 1/2/3 단계로 지정해 단계별로 생성·비교 테스트할 수 있게 한다.
+> 목표: 뎁스를 1/2/3/4 단계로 지정해 단계별로 생성·비교 테스트할 수 있게 한다.
 
 ## 1. 요구사항 (사용자 확정)
 
 | 항목 | 결정 |
 |------|------|
 | 뎁스 의미 | 들여쓰기 깊이 + 문장 상세도를 묶은 **프리셋** |
-| 단계 수 | **3단계** — 1=요약, 2=표준, 3=상세(현재 동작) |
+| 단계 수 | **4단계** — 1=요약, 2=표준(기존 보존), 3=중간, 4=상세(기존 depth3 동작) |
 | 기본값 | **2 (표준)** — 지금보다 한 단계 간결 |
 | 설정 방법 | `repo-config.json` `defaults.reportDepth` + `REPORT_DEPTH` env override |
-| 테스트 | 비교 스크립트 — 1회 수집으로 depth 1/2/3 출력을 나란히 생성 |
+| 테스트 | 비교 스크립트 — 1회 수집으로 depth 1/2/3/4 출력을 나란히 생성 |
 
 ## 2. 아키텍처 (접근 방식 A: 프롬프트 프로파일)
 
@@ -21,13 +21,13 @@
 ```
 repo-config.json ──┐
   defaults.reportDepth=2          lib/config.js
-  depthProfiles{1,2,3}  ──────▶   env.reportDepth (REPORT_DEPTH 우선, 1~3 검증)
+  depthProfiles{1,2,3,4} ─────▶   env.reportDepth (REPORT_DEPTH 우선, 1~4 검증)
                                   depthProfiles 노출
                                         │
                                         ▼
                                   lib/publisher.js
                                   buildDepthGuidance(config)
-                                        │ (depth=3 → 빈 문자열 = 프롬프트 불변)
+                                        │ (depth=4 → 빈 문자열 = 기존 상세 프롬프트 불변)
                                         ▼
                                   aiSummarize() 프롬프트에 「상세도 규칙 — 최우선」 블록 주입
 ```
@@ -42,13 +42,14 @@ repo-config.json ──┐
 - `defaults.reportDepth: 2` 추가.
 - 최상위 `depthProfiles` 섹션 추가:
   - `"1"` (요약): 들여쓰기 최대 2단(카테고리 > 항목), 서브카테고리 헤더 생략, 카테고리당 최대 5줄, 괄호 부연 금지, 버그 검출도 1줄 요약.
-  - `"2"` (표준): 들여쓰기 최대 3단(카테고리 > 서브카테고리 > 항목), 4단 세부 bullet 금지(필요 세부는 괄호 1개로 흡수), 서브카테고리당 최대 3줄, 괄호 부연 줄당 1개·짧게, 버그 검출은 증상/원인/결과 각 1줄 유지.
-  - `"3"` (상세): `promptGuidance: ""` — 현재 프롬프트와 동일 (회귀 없음).
+  - `"2"` (표준): 기존 depth2 규칙 보존 — 들여쓰기 최대 3단, 서브카테고리당 최대 3줄, 버그 검출 결과 압축 유지.
+  - `"3"` (중간): 기존 depth2와 depth3의 중간 분량(불릿 30~36줄, 최대 38줄)을 목표로 하고, 들여쓰기 최대 4단, 서브카테고리당 2~3개 테마·테마별 세부 최대 2줄을 유지.
+  - `"4"` (상세): 기존 depth3의 `promptGuidance: ""`를 이관 — 현재 상세 프롬프트와 동일 (회귀 없음).
 - 프로파일 스키마: `{ "label": string, "promptGuidance": string }`.
 
 ### 3.2 lib/config.js
 - `env.reportDepth` 결정: `REPORT_DEPTH` env → `defaults.reportDepth` → `2`.
-- 검증: 1~3 정수가 아니면 경고 출력 후 2로 폴백 (실행은 계속 — cron 안정성).
+- 검증: 1~4 정수가 아니면 경고 출력 후 2로 폴백 (실행은 계속 — cron 안정성).
 - `depthProfiles: raw.depthProfiles || {}` 를 config에 노출.
 
 ### 3.3 lib/publisher.js
@@ -56,14 +57,15 @@ repo-config.json ──┐
   - 현재 depth의 프로파일 `promptGuidance`가 비어있지 않으면
     `## 상세도(depth=N: label) 규칙 — 최우선\n(다른 규칙과 충돌하면 이 섹션이 우선한다)\n<guidance>` 반환, 아니면 `""`.
 - `aiSummarize()`: 「핵심 원칙」 섹션 직후·filterGuidance 앞에 조건부 삽입.
-  **depth=3이면 빈 문자열이라 프롬프트가 기존과 바이트 동일** — 기존 동작 회귀 없음.
+  **depth=4이면 빈 문자열이라 기존 상세 프롬프트와 바이트 동일** — 기존 동작 회귀 없음.
 - 로그: `AI 요약 중... (depth=N label)`.
+- 기본 출력 파일명: `out/jo-hyunwoo-YYYY-MM-DD.depthN.md`. `OUTPUT_PATH`를 명시하면 해당 경로를 그대로 사용.
 - exports에 `buildContent`, `aiSummarize`, `buildOutputPath` 추가 (depth-test 재사용용).
 
 ### 3.4 scripts/depth-test.js (신규)
 - index.js와 동일하게 회의 날짜 결정 → **수집 1회** (notion/session/git) → `buildContent()`로 rawSection 1회 구성.
-- depth 1→2→3 순차로 `aiSummarize()` 호출 (config 객체를 depth만 바꿔 얕은 복사).
-- 출력: `out/jo-hyunwoo-YYYY-MM-DD.depth1.md` / `.depth2.md` / `.depth3.md` — 원본 보고서(`jo-hyunwoo-YYYY-MM-DD.md`)는 건드리지 않음.
+- depth 1→2→3→4 순차로 `aiSummarize()` 호출 (config 객체를 depth만 바꿔 얕은 복사).
+- 출력: `out/jo-hyunwoo-YYYY-MM-DD.depth1.md` / `.depth2.md` / `.depth3.md` / `.depth4.md`.
 - 실패한 depth는 경고 후 스킵, 마지막에 단계별 성공/실패 + 줄 수 요약표 출력. 1개 이상 실패 시 exit 1.
 
 ### 3.5 run-depth-test.sh (신규, 루트)
@@ -71,7 +73,7 @@ repo-config.json ──┐
 - `AI_SUMMARIZE=1` 강제 후 `node scripts/depth-test.js` 실행. 실행 권한(+x) 부여.
 
 ### 3.6 README.md
-- Optional env vars에 `REPORT_DEPTH` (1=요약, 2=표준(기본), 3=상세) 추가.
+- Optional env vars에 `REPORT_DEPTH` (1=요약, 2=표준(기본), 3=중간, 4=상세) 추가.
 - Run 섹션에 `./run-depth-test.sh` 사용법 1줄 추가.
 
 ## 4. 에러 처리
@@ -81,8 +83,8 @@ repo-config.json ──┐
 
 ## 5. 테스트 계획
 1. **정적**: `node --check` (config.js / publisher.js / depth-test.js).
-2. **config 단위**: `REPORT_DEPTH=1|2|3|0|abc|미설정` × `loadConfig()` → reportDepth 기대값 (1/2/3/2+경고/2+경고/2).
-3. **프롬프트 회귀**: depth=3에서 `buildDepthGuidance() === ""` 확인 → 프롬프트 불변 보장.
+2. **config 단위**: `REPORT_DEPTH=1|2|3|4|0|abc|미설정` × `loadConfig()` → reportDepth 기대값 (1/2/3/4/2+경고/2+경고/2).
+3. **프롬프트 회귀**: depth=4에서 `buildDepthGuidance() === ""` 확인 → 기존 상세 프롬프트 불변 보장.
 4. **E2E**: `./run-depth-test.sh` 실제 실행 → 3개 출력 파일 생성·깊이/줄수 비교 (claude CLI 호출, 회당 수 분).
 
 ## 6. 범위 외 (YAGNI)

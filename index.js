@@ -1,118 +1,215 @@
-// Design Ref: §4.4 + §4.6 — 엔트리포인트 (워크플로 오케스트레이션 + 멀티소스 통합)
-const path = require("path");
 const fs = require("fs");
 const { loadConfig } = require("./lib/config");
-const { collectAll } = require("./lib/collector");
-const { mergeIntoAutoContent } = require("./lib/merger");
-const { collectAndSave } = require("./lib/collect-notion-api");
-const { collectAndSave: collectSessionAndSave } = require("./lib/collect-session");
+const { validateReport } = require("./lib/fact-validator");
+const { publishNotes } = require("./lib/notion-issue-publisher");
+const { selectPresentationNotes } = require("./lib/presentation-note-classifier");
 const {
-  generate,
-  update,
-  resolveMeetingDate,
-  dateRange,
-  targetWednesday,
-  formatDate,
+  buildCandidatesPath,
+  buildPublishedPath,
+  buildValidationPath,
+  writeJsonAtomic,
+} = require("./lib/report-artifact");
+const { collectSnapshot, loadSnapshot } = require("./lib/report-snapshot");
+const {
+  buildOutputPath,
   buildWikiUrl,
   extractTitleFromUrl,
+  formatDate,
+  generate,
   parseMeetingDateFromTitle,
+  resolveMeetingDate,
+  targetWednesday,
+  update,
 } = require("./lib/publisher");
 
-async function main() {
-  const config = loadConfig();
-
-  // 1. 회의 날짜 결정
+function resolveRunMeetingDate(config, now = new Date()) {
   let meetingDate = resolveMeetingDate(config);
   let wikiUrl = config.env.wikiUrl;
 
   if (!wikiUrl) {
-    if (!meetingDate) meetingDate = targetWednesday(new Date());
+    if (!meetingDate) meetingDate = targetWednesday(now);
     wikiUrl = buildWikiUrl(meetingDate, config);
   }
 
   if (!meetingDate) {
     const title = extractTitleFromUrl(wikiUrl);
-    meetingDate = parseMeetingDateFromTitle(title) || targetWednesday(new Date());
+    meetingDate = parseMeetingDateFromTitle(title) || targetWednesday(now);
   }
 
   if (!meetingDate || Number.isNaN(meetingDate.getTime())) {
-    console.error("Could not determine meeting date. Set MEETING_DATE=YYYY-MM-DD.");
-    process.exit(1);
+    throw new Error("Could not determine meeting date. Set MEETING_DATE=YYYY-MM-DD.");
+  }
+  return meetingDate;
+}
+
+function writeCandidates(snapshot, snapshotPath, meetingDate, config) {
+  const candidatesPath = buildCandidatesPath(meetingDate, config);
+  writeJsonAtomic(candidatesPath, {
+    schemaVersion: 1,
+    meetingDate: snapshot.meetingDate,
+    snapshotPath,
+    snapshotHash: snapshot.contentHash,
+    mode: config.env.presentationNoteMode,
+    candidates: snapshot.presentationCandidates || [],
+  });
+  console.log(`[presentation] 후보 저장: ${candidatesPath}`);
+  return candidatesPath;
+}
+
+function validateDraft(snapshot, snapshotPath, reportPath, meetingDate, config) {
+  const reportContent = fs.readFileSync(reportPath, "utf8");
+  const validation = validateReport(snapshot.rawContent, reportContent, {
+    meetingDate: formatDate(meetingDate),
+    reportDepth: config.env.reportDepth,
+    sectionHeader: config.env.sectionHeader,
+    snapshotHash: snapshot.contentHash,
+    snapshotPath,
+    repos: config.repos,
+  });
+  const validationPath = buildValidationPath(reportPath);
+  writeJsonAtomic(validationPath, validation);
+  console.log(`[validation] ${validation.status}: ${validationPath}`);
+  for (const issue of validation.issues) {
+    console.warn(`[validation] ${issue.severity} ${issue.code}: ${issue.message}`);
+  }
+  return { validation, validationPath };
+}
+
+function assertPublishable(validation, config) {
+  if (validation.status === "PASS") return;
+  if (config.env.validationOverride) {
+    console.warn(`[validation] VALIDATION_OVERRIDE=1 — ${validation.status} 결과를 수동 우회합니다.`);
+    return;
+  }
+  if (config.env.validationMode === "block") {
+    throw new Error(`보고서 검증 ${validation.status}: Redmine 반영을 중단합니다.`);
+  }
+  console.warn(`[validation] VALIDATION_MODE=warn — ${validation.status} 상태로 계속합니다.`);
+}
+
+async function runCollect(config, meetingDate) {
+  const result = await collectSnapshot(config, meetingDate);
+  writeCandidates(result.snapshot, result.snapshotPath, meetingDate, config);
+  if (result.snapshot.status !== "sealed" && !config.env.allowPartialSnapshot) {
+    throw new Error(
+      `수집 snapshot이 ${result.snapshot.status} 상태입니다: ${result.snapshot.failures.join("; ")}`
+    );
+  }
+  return result;
+}
+
+async function runGenerate(config, meetingDate) {
+  const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
+  writeCandidates(snapshot, snapshotPath, meetingDate, config);
+  const reportPath = await generate(
+    config,
+    meetingDate,
+    snapshot.autoContent,
+    [],
+    { rawContent: snapshot.rawContent }
+  );
+  const validationResult = validateDraft(
+    snapshot,
+    snapshotPath,
+    reportPath,
+    meetingDate,
+    config
+  );
+  return { snapshot, snapshotPath, reportPath, ...validationResult };
+}
+
+function buildIssueEnv(config) {
+  return {
+    redmineBase: config.env.baseUrl,
+    redmineKey: config.env.apiKey,
+    notionKey: process.env.NOTION_API_KEY,
+    projectIdentifier: config.env.projectId,
+  };
+}
+
+async function runUpdate(config, meetingDate) {
+  const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
+  const reportPath = buildOutputPath(meetingDate, config);
+  if (!fs.existsSync(reportPath)) {
+    throw new Error(`초안 파일이 없습니다: ${reportPath}`);
   }
 
+  writeCandidates(snapshot, snapshotPath, meetingDate, config);
+  const { validation, validationPath } = validateDraft(
+    snapshot,
+    snapshotPath,
+    reportPath,
+    meetingDate,
+    config
+  );
+  assertPublishable(validation, config);
+
+  const candidates = Number(config.env.reportDepth) === 3
+    ? selectPresentationNotes(
+      snapshot.presentationCandidates || [],
+      config.env.presentationNoteMode
+    )
+    : [];
+  const loadNoteRefs = candidates.length
+    ? async () => {
+      if (!process.env.NOTION_API_KEY) {
+        throw new Error("발표노트 Issue 생성에 NOTION_API_KEY가 필요합니다.");
+      }
+      const refs = await publishNotes(buildIssueEnv(config), candidates, {});
+      console.log(`[issue] presentation notes: ${refs.length}`);
+      return refs;
+    }
+    : null;
+
+  const publishedPath = buildPublishedPath(reportPath);
+  const result = await update(config, meetingDate, { loadNoteRefs, publishedPath });
+  return {
+    snapshot,
+    snapshotPath,
+    reportPath,
+    validation,
+    validationPath,
+    publishedPath: result && result.publishedPath,
+  };
+}
+
+async function main() {
+  const config = loadConfig();
+  const meetingDate = resolveRunMeetingDate(config);
   console.log(`Meeting date: ${formatDate(meetingDate)}`);
   console.log(`Mode: ${config.env.mode}`);
 
-  // [publish 순수화] update(올리기)는 generate가 만든 초안 파일만 읽어 올린다.
-  // 커밋/Notion/세션 수집과 AI 요약은 generate 전용 — update에서는 건너뛴다.
-  if (config.env.mode === "update") {
-    await update(config, meetingDate);
-    return;
-  }
-
-  // 2. 커밋 수집 + 분류
-  const { startDate, endDate } = dateRange(meetingDate);
-  console.log(`Collecting commits: ${startDate} ~ ${endDate}`);
-
-  // 2-1. Notion API 수집 — 매 실행마다 새로 수집 (freshness 체크는 stale 캐시 위험을 키움)
-  const isoStart = startDate.slice(0, 10);
-  const isoEnd = endDate.slice(0, 10);
-  if (process.env.NOTION_API_KEY) {
-    try {
-      await collectAndSave(config, isoStart, isoEnd, config.env.outputDir);
-    } catch (err) {
-      console.warn(`[notion-api] Collection failed: ${err.message}`);
-    }
-  } else {
-    console.warn("[notion-api] NOTION_API_KEY not set, skipping collection");
-  }
-
-  // 2-2. 세션 요약 수집 (session-summary.md → session-items.json)
-  try {
-    collectSessionAndSave(config, startDate, endDate, config.env.outputDir);
-  } catch (err) {
-    console.warn(`[session] Collection failed: ${err.message}`);
-  }
-
-  // Plan SC: SC-01 — 3개 소스 통합 보고서 생성
-  const gitResult = await collectAll(config, startDate, endDate);
-  const autoContent = mergeIntoAutoContent(
-    gitResult,
-    path.join(config.env.outputDir, "notion-items.json"),
-    path.join(config.env.outputDir, "session-items.json"),
-    config,
-    { start: isoStart, end: isoEnd }
-  );
-
-  // 3. generate 모드 실행 (update는 위에서 파일만 읽어 처리 후 반환됨)
-  if (config.env.mode === "generate") {
-    // 발표노트(KB tag=발표노트) → Redmine 작업(Issue) 자동 등록. depth3 발행분에서만.
-    let noteRefs = [];
-    if (Number(config.env.reportDepth) === 3 && process.env.NOTION_API_KEY) {
-      try {
-        const { queryPresentationNotes, publishNotes } = require("./lib/notion-issue-publisher");
-        const issueEnv = {
-          redmineBase: config.env.baseUrl,
-          redmineKey: config.env.apiKey,
-          notionKey: process.env.NOTION_API_KEY,
-          projectIdentifier: config.env.projectId,
-        };
-        const notes = await queryPresentationNotes(issueEnv, isoStart, isoEnd);
-        noteRefs = await publishNotes(issueEnv, notes, {});
-        console.log(`[issue] presentation notes: ${noteRefs.length}`);
-      } catch (err) {
-        console.warn(`[issue] publishNotes failed: ${err.message}`);
+  switch (config.env.mode) {
+    case "collect":
+      return runCollect(config, meetingDate);
+    case "generate": {
+      const result = await runGenerate(config, meetingDate);
+      if (result.validation.status !== "PASS" && config.env.validationMode === "block") {
+        process.exitCode = 2;
       }
+      return result;
     }
-    const outputPath = await generate(config, meetingDate, autoContent, noteRefs);
-    console.log(`Generated: ${outputPath}`);
-  } else {
-    console.error(`Unknown MODE: ${config.env.mode}. Use 'generate' or 'update'.`);
-    process.exit(1);
+    case "update":
+      return runUpdate(config, meetingDate);
+    default:
+      throw new Error(`Unknown MODE: ${config.env.mode}. Use collect, generate, or update.`);
   }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = {
+  assertPublishable,
+  main,
+  resolveRunMeetingDate,
+  runCollect,
+  runGenerate,
+  runUpdate,
+  validateDraft,
+  writeCandidates,
+};
