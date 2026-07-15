@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT=/home/jhw/ai/opencode/projects/redmine
+_requested_mode="${MODE:-}"
 
 if [[ -f "$ROOT/.env" ]]; then
   set -a
@@ -9,6 +10,13 @@ if [[ -f "$ROOT/.env" ]]; then
   source "$ROOT/.env"
   set +a
 fi
+
+if [[ -n "$_requested_mode" ]]; then
+  export MODE="$_requested_mode"
+else
+  export MODE="${MODE:-generate}"
+fi
+unset _requested_mode
 
 # NOTION_API_KEY는 ~/.bashrc를 single source of truth로 사용한다.
 if [[ -z "${NOTION_API_KEY:-}" && -f "$HOME/.bashrc" ]]; then
@@ -20,7 +28,6 @@ if [[ -z "${NOTION_API_KEY:-}" && -f "$HOME/.bashrc" ]]; then
   unset _notion_line
 fi
 
-export MODE="${MODE:-generate}"
 export TZ=Asia/Seoul
 export PATH="/home/jhw/.nvm/versions/node/v24.12.0/bin:/home/jhw/.local/bin:$PATH"
 exec node "$ROOT/index.js"
