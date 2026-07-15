@@ -21,5 +21,6 @@ if [[ -z "${NOTION_API_KEY:-}" && -f "$HOME/.bashrc" ]]; then
 fi
 
 export MODE="${MODE:-generate}"
+export TZ=Asia/Seoul
 export PATH="/home/jhw/.nvm/versions/node/v24.12.0/bin:/home/jhw/.local/bin:$PATH"
 exec node "$ROOT/index.js"

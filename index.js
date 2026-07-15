@@ -144,6 +144,7 @@ async function runUpdate(config, meetingDate) {
   );
   assertPublishable(validation, config);
 
+  // 발표노트 자동 등록은 프로젝트 정책상 운영 프로필인 depth3 update에서만 수행한다.
   const candidates = Number(config.env.reportDepth) === 3
     ? selectPresentationNotes(
       snapshot.presentationCandidates || [],
