@@ -77,6 +77,15 @@ function validateDraft(snapshot, snapshotPath, reportPath, meetingDate, config) 
 
 function assertPublishable(validation, config) {
   if (validation.status === "PASS") return;
+  // WARNING은 "수동 확인이 필요하다"는 신호이지 게시 금지가 아니다. error가 하나도 없는
+  // 상태이므로 게시를 진행한다. (예: open_status_pickaxe_unavailable은 코드 심볼이 없는
+  // 문장이라 자동 확인이 불가능할 뿐이며, 문구 수정으로 없앨 수 없어 게시가 영구 차단됐다.)
+  if (validation.status === "WARNING") {
+    console.warn(
+      "[validation] WARNING — error 없음. 게시를 진행합니다. 경고 항목은 수동 확인이 필요합니다."
+    );
+    return;
+  }
   if (config.env.validationOverride) {
     console.warn(`[validation] VALIDATION_OVERRIDE=1 — ${validation.status} 결과를 수동 우회합니다.`);
     return;

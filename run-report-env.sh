@@ -30,4 +30,22 @@ fi
 
 export TZ=Asia/Seoul
 export PATH="/home/jhw/.nvm/versions/node/v24.12.0/bin:/home/jhw/.local/bin:$PATH"
-exec node "$ROOT/index.js"
+
+# cron 실행은 실패해도 아무도 모른 채 지나간다 (2026-07-22·07-29 게시가 2주 연속
+# 조용히 누락된 원인). 실패를 반드시 눈에 띄게 남긴다.
+set +e
+node "$ROOT/index.js"
+status=$?
+set -e
+
+if [[ $status -ne 0 ]]; then
+  alert="[ALERT] $(date '+%F %T') redmine 보고 실패 — MODE=${MODE} exit=${status} (로그: $ROOT/out/cron.log)"
+  echo "$alert" >&2
+  printf '%s\n' "$alert" >> "$ROOT/out/ALERT.log"
+  # 데스크톱 알림은 best-effort — cron에는 세션 버스가 없을 수 있으므로 실패를 무시한다.
+  DISPLAY="${DISPLAY:-:0}" \
+  DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}" \
+    notify-send -u critical "Redmine 보고 실패" "MODE=${MODE} exit=${status}" >/dev/null 2>&1 || true
+fi
+
+exit $status
