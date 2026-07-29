@@ -40,8 +40,9 @@ set -e
 
 if [[ $status -ne 0 ]]; then
   alert="[ALERT] $(date '+%F %T') redmine 보고 실패 — MODE=${MODE} exit=${status} (로그: $ROOT/out/cron.log)"
-  echo "$alert" >&2
-  printf '%s\n' "$alert" >> "$ROOT/out/ALERT.log"
+  # set -e 상태이므로 알림 실패(디스크 풀 등)가 exit $status 도달을 막지 않게 한다.
+  echo "$alert" >&2 || true
+  printf '%s\n' "$alert" >> "$ROOT/out/ALERT.log" || true
   # 데스크톱 알림은 best-effort — cron에는 세션 버스가 없을 수 있으므로 실패를 무시한다.
   DISPLAY="${DISPLAY:-:0}" \
   DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}" \

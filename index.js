@@ -98,8 +98,13 @@ function isPublishable(validation) {
 function assertPublishable(validation, config) {
   if (isPublishable(validation)) {
     if (validation.status === "WARNING") {
+      // 어떤 경고를 수동 확인해야 하는지 cron 로그만 보고 알 수 있어야 한다.
+      const codes = (validation.issues || [])
+        .filter((issue) => issue.severity === "warning")
+        .map((issue) => issue.code)
+        .join(", ");
       console.warn(
-        "[validation] WARNING — 게시를 막는 항목은 없습니다. 경고는 수동 확인이 필요합니다."
+        `[validation] WARNING(${codes}) — 게시를 막는 항목은 없습니다. 경고는 수동 확인이 필요합니다.`
       );
     }
     return;
