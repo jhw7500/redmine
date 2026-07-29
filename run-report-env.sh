@@ -40,6 +40,9 @@ set -e
 
 if [[ $status -ne 0 ]]; then
   alert="[ALERT] $(date '+%F %T') redmine 보고 실패 — MODE=${MODE} exit=${status} (로그: $ROOT/out/cron.log)"
+  # ALERT.log가 실패를 남기는 주 방어선이다. out/은 gitignore라 clone 직후에는 없고,
+  # 그 상태에서 || true가 기록 실패를 삼키면 알림 자체가 사라진다. 먼저 만들어 둔다.
+  mkdir -p "$ROOT/out" || true
   # set -e 상태이므로 알림 실패(디스크 풀 등)가 exit $status 도달을 막지 않게 한다.
   echo "$alert" >&2 || true
   printf '%s\n' "$alert" >> "$ROOT/out/ALERT.log" || true
