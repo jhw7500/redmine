@@ -4,7 +4,7 @@
     "notion": {
       "enabled": true,
       "databases": ["Projects", "Knowledge Base"],
-      "searchKeywords": ["iMX93", "wlan", "pim", "pcap", "sc16is7xx", "redmine", "email", "jhw-notion", "automation"],
+      "searchKeywords": ["iMX93", "wlan", "pim", "vpu", "pcap", "sc16is7xx", "redmine", "email", "jhw-notion", "automation"],
       "excludePatterns": [
         "^(AI Workspace|Knowledge Base|Projects|References|Decision Log|내 작업)$",
         "^(Claude Code|oh-my-claudecode|bkit|compound-engineering|superpowers|비-플러그인|claude-code-settings)",
@@ -17,6 +17,7 @@
         "pim-driver-cam": "pimDriverCam",
         "pim-driver-spi": "pimDriverSpiToUart",
         "pim-test": "pimTest",
+        "pim-bsp": "pimBsp",
         "wlan-bsp": "wlanBsp",
         "wlan-app": "wlanApp",
         "wlan-driver": "wlanDriver",
@@ -54,6 +55,9 @@
         "file_check_reboot": "pimApp",
         "PIM 영상 파일": "pimApp",
         "PIM 산출물": "pimApp",
+        "imx-vpu": "pimApp",
+        "vpu": "pimApp",
+        "imx-gst1.0-plugin": "pimApp",
         "wlan-driver": "wlanDriver",
         "wlan-driver-v2": "wlanDriver",
         "wlan-package-jhw": "wlanApp",
@@ -166,6 +170,10 @@
       "category": "pimTest",
       "includeCommitBody": true
     },
+    "imx-vpu": {
+      "path": "/home/jhw/ai/opencode/projects/imx-vpu",
+      "category": "pimApp"
+    },
     "wlan-package": {
       "path": "/home/jhw/ai/opencode/projects/wlan-package",
       "category": "wlanApp"
@@ -236,6 +244,7 @@
     "pimDriverCam": { "label": "Camera Driver", "parent": "PIM", "templateKey": "PIM_DRIVER_CAM_KO" },
     "pimDriverSpiToUart": { "label": "SPI-to-UART Driver", "parent": "PIM", "templateKey": "PIM_DRIVER_SPI2UART_KO" },
     "pimTest": { "label": "Test/Analysis", "parent": "PIM", "templateKey": "PIM_TEST_KO" },
+    "pimBsp": { "label": "iMX8MP BSP", "parent": "PIM", "templateKey": "PIM_BSP_KO" },
     "wlanBsp": { "label": "iMX93 BSP", "parent": "Wireless Lan", "templateKey": "WLAN_BSP_KO" },
     "wlanApp": { "label": "Application", "parent": "Wireless Lan", "templateKey": "WLAN_APPLICATION_KO" },
     "wlanDriver": { "label": "Driver", "parent": "Wireless Lan", "templateKey": "WLAN_DRIVER_KO" },
@@ -270,6 +279,7 @@
     }
   },
   "trivialPatterns": [
+    "^(MLK|MMFMWK)-\\d+",
     "^(log|gitignore|__pycache__|chore|merge branch|Merge branch|docs\\/plans|\\.gitignore)",
     "^(Address\\s+)?PR\\s*#\\d+\\s*(코드\\s*리뷰\\s*(반영|피드백)|review\\s*feedback)\\s*$",
     "^코드\\s*리뷰\\s*(반영|추가\\s*수정|잔여\\s*항목|피드백)\\s*$",
@@ -368,7 +378,7 @@
       "aggressiveWirelessLanSummary": "Wireless Lan 섹션은 줄 수가 가장 비대해지기 쉬우므로 공격적으로 축약한다. Driver는 moal_bridge 관련 20+ 커밋이 쏟아지는데, 상위 1줄 'moal_bridge 안정성/성능 하드닝' + 하위 2줄(안정성축 한 줄, 성능축 한 줄)로 압축. Application도 systemd/JSON/바이너리/모니터링 축으로 묶어 4줄 이하 유지. 개별 레지스터 값·하위 ID(B1~E5)·단일 설정 이름을 열거하지 말고 축 단위 포괄 요약. 동일 프로젝트(wlan-package/wlan-driver/wlan-bridge)의 세부 작업은 '정비/하드닝/분리/모니터링'처럼 테마별로 뭉치되 그 안에서 구체 메커니즘 1~2개만 예시로 괄호 안에 남겨라.",
       "noCommitTypeLabels": "출력에 '구현/수정/리팩토링/문서/기타' 같은 commit 타입 라벨은 **절대 쓰지 마라**. 같은 프로젝트 내 여러 타입 항목은 자연스러운 한 줄 문장으로 배치한다. 예: 라벨 없이 'wifi.sh jq // true 버그 수정'을 다른 구현 항목과 같은 레벨 bullet으로. 서브그룹 들여쓰기는 계층 그룹핑(상위 포괄+하위 축) 용도에만 사용.",
       "preferBrevity": "**계층 구조(themeBasedGrouping)는 반드시 유지하고 각 라인의 세부 정보만 짧게**. 평탄 나열 금지.\n(0) **본 규칙은 themeBasedGrouping의 보조다 — themeBasedGrouping이 제시하는 '테마 헤더(2단계) + 하위 세부(3단계)' 구조를 먼저 적용한 뒤, 각 라인 길이만 압축하라**.\n(1) **카테고리(예: PIM > Application) 안의 sub-bullet 4개 이상이 같은 들여쓰기로 평탄 나열되면 안 된다**. 반드시 2~3개의 테마 헤더로 묶고 그 아래 세부 항목을 두라.\n예시 (올바른 구조):\n  - Application\n    - pim-package v0.6.1 출시 + 머지 인프라 정비\n      - 릴리스 노트 + GitHub-GitLab 양방향 머지 통합\n      - sync-to-gitlab.sh 정비 (.gitignore 자동 적용·prefix 필터·모드 분리)\n      - docker build 산출물 자동 검증 (ARM aarch64 + GLIBC max)\n    - 카메라 영상 제어 V4L2 일원화\n      - led_flash V4L2 통합 제어 (MCP4018 wiper + AR0234 flash)\n      - chk_cam_operate 채널별 진단 강화 (file_cnt 포함, 로그 포맷 표준화)\n(2) **각 라인(특히 3단계 세부)은 한 줄당 80~100자 이내**.\n(3) 괄호 안 부수 정보는 **1~2개 핵심 키워드만 남기고 나머지 제거**. 'A, B, C, D, E' 5개 이상 나열 금지.\n예시 (라인 압축):\n  - vcm SRT 파이프라인 안정화 (v4.4) — start_video_time 보존 + mtime 추적, srt_auto_sync popen→mktime 통합, prefixFileName garbage 차단 ← 너무 길다\n  - vcm SRT 파이프라인 안정화 (v4.4) — 자막 동기/garbage 차단 ← 좋다\n(4) 메커니즘 이름·flag·scenario 식별자는 **결과/효과** 표현으로 대체. 식별자는 검색용으로 1~2개만 남김.\n(5) 버그 검출(증상/원인/결과)은 길이 cap 적용 안 됨.\n(6) 전체 보고서 50~60줄 이내 목표 (계층은 반드시 보존, 라인 길이로 압축).",
-      "mandatorySections": "원본 입력(rawContent)에서 어떤 서브카테고리 아래에 **1줄이라도 내용이 있으면** 그 서브카테고리 헤더와 내용은 **절대 삭제 금지**. 특히 'iMX93 BSP', 'Camera Driver', 'SPI-to-UART Driver', 'PIM > Application', 'Wireless Lan > iMX93 BSP/Application/Driver/Test/Analysis'는 자주 누락되므로 최우선 보존. **[Notion] 태그가 붙은 항목은 사용자가 수동으로 보고용 가치 있다고 판단해 등록한 항목이다. 정보 손실 없이 모두 보존하라. 묶기·압축은 가능하지만 항목 자체를 통째로 삭제하지 마라.** [Notion]/[CC] 같은 source 태그는 출력 시 제거하되 내용은 보존. **여러 [Notion] 항목이 같은 테마(예: M33/U-Boot/imx-boot/mcuxsdk/RGPIO/TCML)면 상위 1줄 + 하위 2~5줄로 통합 가능하나, 핵심 키워드(M33, U-Boot, RGPIO, TCML, mcuxsdk, imx-boot, devtool, factory-reset, reset-button 등)는 반드시 출력에 등장해야 한다.** 내용이 애매해도 최소 1줄로 요약하여 보존. 본 규칙은 'teamRelevance', 'aggressiveWirelessLanSummary', 'preferBrevity'보다 **우선**한다 (충돌 시 mandatorySections 적용). 섹션 헤더는 원본 template 계층을 그대로 따를 것.",
+      "mandatorySections": "원본 입력(rawContent)에서 어떤 서브카테고리 아래에 **1줄이라도 내용이 있으면** 그 서브카테고리 헤더와 내용은 **절대 삭제 금지**. 특히 'iMX93 BSP', 'Camera Driver', 'SPI-to-UART Driver', 'PIM > Application', 'PIM > iMX8MP BSP', 'Wireless Lan > iMX93 BSP/Application/Driver/Test/Analysis'는 자주 누락되므로 최우선 보존. **[Notion] 태그가 붙은 항목은 사용자가 수동으로 보고용 가치 있다고 판단해 등록한 항목이다. 정보 손실 없이 모두 보존하라. 묶기·압축은 가능하지만 항목 자체를 통째로 삭제하지 마라.** [Notion]/[CC] 같은 source 태그는 출력 시 제거하되 내용은 보존. **여러 [Notion] 항목이 같은 테마(예: M33/U-Boot/imx-boot/mcuxsdk/RGPIO/TCML)면 상위 1줄 + 하위 2~5줄로 통합 가능하나, 핵심 키워드(M33, U-Boot, RGPIO, TCML, mcuxsdk, imx-boot, devtool, factory-reset, reset-button 등)는 반드시 출력에 등장해야 한다.** 내용이 애매해도 최소 1줄로 요약하여 보존. 본 규칙은 'teamRelevance', 'aggressiveWirelessLanSummary', 'preferBrevity'보다 **우선**한다 (충돌 시 mandatorySections 적용). 섹션 헤더는 원본 template 계층을 그대로 따를 것.",
       "avoidFeatureVerbosity": "버그 섹션(증상/원인/결과)이 아닌 일반 기능/개선 항목은 간결 우선. 숫자 나열(70 케이스, 6축 등), 파일명(run_comprehensive_verify.py 같은), 내부 ID(B1~E5, IA-M10 등), '총 X분' 같은 실행 시간 수치는 **제거**하고 결과만 한 줄로. 예: '멀티축 자동화 테스트 커버리지 확장 (수십→96+ 시나리오, 96/96 PASS)'는 수용 가능하나, 'schema 확장(6개 신규 축·70 케이스 자동생성)' 같은 세부는 생략.",
       "strictCategoryMapping": "다음 repo/프로젝트는 반드시 지정된 카테고리 하위에 배치한다. 이 규칙 위반 금지. pcap-analyzer → 'Wireless Lan > Test/Analysis'(ETC 금지). cts-ta-mcp-server/HiWorks 근태 관리 → 'ETC'. cts-email-mcp-server → 'ETC'. jhw-notion/Notion MCP → 'ETC'. redmine 주간 보고 자동화 → 'ETC'. automation/CI/CD → 'ETC'. pim-package/pim-check/max9296 등 PIM 프로젝트 → 'PIM' 하위. wlan-package/wlan-driver/wlan-bridge/wpa-supplicant/mlanutl → 'Wireless Lan' 하위. 모호하면 절대 ETC로 보내지 말고 입력 섹션 위치를 따를 것.",
       "headerReuseBan": "섹션 헤더('moal_bridge 안정성/성능 하드닝' 같은 상위 라인)를 다른 서브카테고리에서 재사용하지 마라. 'moal_bridge' 관련 하드닝 헤더는 오직 'Wireless Lan > Driver' 아래에서만 사용한다. 'Wireless Lan > Application'에는 wifi_init/wifi_services/systemd/JSON 관련 헤더만 허용. 각 서브카테고리의 기능 성격에 맞는 고유 상위 라인을 작성하라.",

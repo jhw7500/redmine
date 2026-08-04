@@ -9,6 +9,8 @@
 {{PIM_DRIVER_SPI2UART_KO}}
   - Test/Analysis
 {{PIM_TEST_KO}}
+  - iMX8MP BSP
+{{PIM_BSP_KO}}
 
 - Wireless Lan
   - iMX93 BSP
