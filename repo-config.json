@@ -4,7 +4,7 @@
     "notion": {
       "enabled": true,
       "databases": ["Projects", "Knowledge Base"],
-      "searchKeywords": ["iMX93", "wlan", "pim", "pcap", "sc16is7xx", "redmine", "email", "jhw-notion", "automation"],
+      "searchKeywords": ["iMX93", "wlan", "pim", "vpu", "pcap", "sc16is7xx", "redmine", "email", "jhw-notion", "automation"],
       "excludePatterns": [
         "^(AI Workspace|Knowledge Base|Projects|References|Decision Log|내 작업)$",
         "^(Claude Code|oh-my-claudecode|bkit|compound-engineering|superpowers|비-플러그인|claude-code-settings)",
@@ -17,6 +17,7 @@
         "pim-driver-cam": "pimDriverCam",
         "pim-driver-spi": "pimDriverSpiToUart",
         "pim-test": "pimTest",
+        "pim-bsp": "pimBsp",
         "wlan-bsp": "wlanBsp",
         "wlan-app": "wlanApp",
         "wlan-driver": "wlanDriver",
@@ -54,6 +55,9 @@
         "file_check_reboot": "pimApp",
         "PIM 영상 파일": "pimApp",
         "PIM 산출물": "pimApp",
+        "imx-vpu": "pimApp",
+        "vpu": "pimApp",
+        "imx-gst1.0-plugin": "pimApp",
         "wlan-driver": "wlanDriver",
         "wlan-driver-v2": "wlanDriver",
         "wlan-package-jhw": "wlanApp",
@@ -166,6 +170,10 @@
       "category": "pimTest",
       "includeCommitBody": true
     },
+    "imx-vpu": {
+      "path": "/home/jhw/ai/opencode/projects/imx-vpu",
+      "category": "pimApp"
+    },
     "wlan-package": {
       "path": "/home/jhw/ai/opencode/projects/wlan-package",
       "category": "wlanApp"
@@ -236,6 +244,7 @@
     "pimDriverCam": { "label": "Camera Driver", "parent": "PIM", "templateKey": "PIM_DRIVER_CAM_KO" },
     "pimDriverSpiToUart": { "label": "SPI-to-UART Driver", "parent": "PIM", "templateKey": "PIM_DRIVER_SPI2UART_KO" },
     "pimTest": { "label": "Test/Analysis", "parent": "PIM", "templateKey": "PIM_TEST_KO" },
+    "pimBsp": { "label": "iMX8MP BSP", "parent": "PIM", "templateKey": "PIM_BSP_KO" },
     "wlanBsp": { "label": "iMX93 BSP", "parent": "Wireless Lan", "templateKey": "WLAN_BSP_KO" },
     "wlanApp": { "label": "Application", "parent": "Wireless Lan", "templateKey": "WLAN_APPLICATION_KO" },
     "wlanDriver": { "label": "Driver", "parent": "Wireless Lan", "templateKey": "WLAN_DRIVER_KO" },
@@ -270,6 +279,7 @@
     }
   },
   "trivialPatterns": [
+    "^(MLK|MMFMWK)-\\d+",
     "^(log|gitignore|__pycache__|chore|merge branch|Merge branch|docs\\/plans|\\.gitignore)",
     "^(Address\\s+)?PR\\s*#\\d+\\s*(코드\\s*리뷰\\s*(반영|피드백)|review\\s*feedback)\\s*$",
     "^코드\\s*리뷰\\s*(반영|추가\\s*수정|잔여\\s*항목|피드백)\\s*$",
