@@ -19,13 +19,16 @@ fi
 unset _requested_mode
 
 # NOTION_API_KEY는 ~/.bashrc를 single source of truth로 사용한다.
+# 해당 줄을 eval 로 실행하지는 않는다 — .bashrc 한 줄에 다른 명령이 이어 붙어 있으면
+# 키를 읽으려다 그 명령까지 함께 실행된다. 키 값만 뽑아 대입한다.
+# 값 문자 집합을 [A-Za-z0-9_-] 로 제한해 따옴표·주석·후속 명령이 값에 섞이지 않게 한다.
 if [[ -z "${NOTION_API_KEY:-}" && -f "$HOME/.bashrc" ]]; then
-  _notion_line=$(grep -E '^[[:space:]]*export[[:space:]]+NOTION_API_KEY=' "$HOME/.bashrc" | tail -1 || true)
-  if [[ -n "$_notion_line" ]]; then
-    eval "$_notion_line"
-    export NOTION_API_KEY
+  _notion_value=$(sed -nE "s/^[[:space:]]*export[[:space:]]+NOTION_API_KEY=[\"']?([A-Za-z0-9_-]+).*/\1/p" \
+    "$HOME/.bashrc" | tail -1)
+  if [[ -n "$_notion_value" ]]; then
+    export NOTION_API_KEY="$_notion_value"
   fi
-  unset _notion_line
+  unset _notion_value
 fi
 
 export TZ=Asia/Seoul
