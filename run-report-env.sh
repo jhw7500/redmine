@@ -31,6 +31,18 @@ fi
 export TZ=Asia/Seoul
 export PATH="/home/jhw/.nvm/versions/node/v24.12.0/bin:/home/jhw/.local/bin:$PATH"
 
+# 알림 자격증명은 repowire가 이미 쓰는 ~/.repowire/config.yaml을 single source of truth로
+# 둔다. 섹션 범위를 막아 다른 섹션의 동명 키(slack.bot_token vs telegram.bot_token)를
+# 집지 않게 한다. 값이 없거나 YAML null이면 빈 문자열 — 호출부가 "미설정"으로 처리한다.
+repowire_conf_value() {
+  local section=$1 key=$2 conf="$HOME/.repowire/config.yaml" value
+  [[ -f "$conf" ]] || return 0
+  value=$(sed -n "/^${section}:/,/^[^[:space:]]/{s/^[[:space:]]*${key}:[[:space:]]*//p}" "$conf" \
+    | tr -d '"'"'"' \t\r' | head -1)
+  [[ "$value" == "null" ]] && value=""
+  printf '%s' "$value"
+}
+
 # cron 실행은 실패해도 아무도 모른 채 지나간다 (2026-07-22·07-29 게시가 2주 연속
 # 조용히 누락된 원인). 실패를 반드시 눈에 띄게 남긴다.
 set +e
@@ -50,6 +62,33 @@ if [[ $status -ne 0 ]]; then
   DISPLAY="${DISPLAY:-:0}" \
   DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}" \
     notify-send -u critical "Redmine 보고 실패" "MODE=${MODE} exit=${status}" >/dev/null 2>&1 || true
+
+  # 원격 푸시 — 새벽 크론 실패는 화면 앞에 사람이 없어 notify-send가 사라진다.
+  # 두 채널 모두 자격증명이 없으면 조용히 건너뛴다(설정 강제 아님). 하나가 실패해도
+  # 나머지 채널과 exit $status 도달을 막지 않도록 전부 best-effort로 둔다.
+  tg_token="${TELEGRAM_BOT_TOKEN:-$(repowire_conf_value telegram bot_token)}"
+  tg_chat="${TELEGRAM_CHAT_ID:-$(repowire_conf_value telegram chat_id)}"
+  if [[ -n "$tg_token" && -n "$tg_chat" ]]; then
+    curl -sS -m 10 -o /dev/null \
+      --data-urlencode "text=${alert}" \
+      -d "chat_id=${tg_chat}" \
+      "https://api.telegram.org/bot${tg_token}/sendMessage" >/dev/null 2>&1 || true
+  fi
+
+  # Slack chat.postMessage — bot_token(xoxb-)과 channel_id가 둘 다 있어야 보낸다.
+  # app_token(xapp-)은 Socket Mode 수신용이라 게시에는 쓰지 않는다.
+  sl_token="${SLACK_BOT_TOKEN:-$(repowire_conf_value slack bot_token)}"
+  sl_chan="${SLACK_CHANNEL_ID:-$(repowire_conf_value slack channel_id)}"
+  if [[ -n "$sl_token" && -n "$sl_chan" ]]; then
+    # alert는 한 줄이라 JSON 문자열에 넣을 때 역슬래시와 큰따옴표만 이스케이프하면 된다.
+    sl_text=${alert//\\/\\\\}
+    sl_text=${sl_text//\"/\\\"}
+    curl -sS -m 10 -o /dev/null \
+      -H "Authorization: Bearer ${sl_token}" \
+      -H "Content-type: application/json; charset=utf-8" \
+      -d "{\"channel\":\"${sl_chan}\",\"text\":\"${sl_text}\"}" \
+      https://slack.com/api/chat.postMessage >/dev/null 2>&1 || true
+  fi
 fi
 
 exit $status
