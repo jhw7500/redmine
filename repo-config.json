@@ -251,6 +251,10 @@
     "wlanTest": { "label": "Test/Analysis", "parent": "Wireless Lan", "templateKey": "WLAN_TEST_KO" },
     "etc": { "label": null, "parent": "ETC", "templateKey": "ETC_KO" }
   },
+  "pathSignals": [
+    { "pattern": "(^|/)(lib/)?firmware/.+\\.bin$", "label": "무선모듈 펌웨어 바이너리 갱신", "skipIf": "firmware|펌웨어|f/w|\\bfw\\b" },
+    { "pattern": "(^|/)(nxp-imx-firmware/|firmware-source\\.json$|SCR-imx-firmware\\.txt$)", "label": "펌웨어 출처·라이선스 문서 갱신", "skipIf": "firmware|펌웨어|provenance|출처|license|라이선스" }
+  ],
   "commitTypes": {
     "feat": {
       "label": "구현",
