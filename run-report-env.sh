@@ -27,9 +27,13 @@ if [[ -z "${NOTION_API_KEY:-}" && -f "$HOME/.bashrc" ]]; then
   _notion_line=$(grep -E '^[[:space:]]*export[[:space:]]+NOTION_API_KEY=' "$HOME/.bashrc" | tail -1 || true)
   if [[ -n "$_notion_line" ]]; then
     _notion_value=${_notion_line#*NOTION_API_KEY=}   # = 뒤 전체
-    _notion_value=${_notion_value%%[[:space:]]*}     # 첫 공백 앞까지 (주석·후속 명령 절단)
-    _notion_value=${_notion_value%%;*}               # 세미콜론 앞까지
-    _notion_value=${_notion_value//[\"\']/}          # 감싼 따옴표 제거
+    # 따옴표로 감쌌으면 닫는 따옴표까지가 값이다 — 값 안의 세미콜론·공백을 보존한다.
+    # 감싸지 않았으면 공백이나 세미콜론에서 자른다(주석·후속 명령 절단).
+    case $_notion_value in
+      \"*) _notion_value=${_notion_value#\"}; _notion_value=${_notion_value%%\"*} ;;
+      \'*) _notion_value=${_notion_value#\'}; _notion_value=${_notion_value%%\'*} ;;
+      *)  _notion_value=${_notion_value%%[[:space:]]*}; _notion_value=${_notion_value%%;*} ;;
+    esac
     if [[ -n "$_notion_value" ]]; then
       export NOTION_API_KEY="$_notion_value"
     fi
