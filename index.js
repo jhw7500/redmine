@@ -21,8 +21,11 @@ const {
 } = require("./lib/report-publishability");
 const {
   appendValidationRevision,
+  assertGenerationStateOwned,
+  assertRunInputs,
   buildRunPaths,
   initializeReportRun,
+  loadReportRun,
   promoteRunReport,
   updateRunState,
   withGenerationStateLock,
@@ -385,6 +388,71 @@ async function runGenerate(config, meetingDate) {
     : runGenerateV1(config, meetingDate);
 }
 
+async function runRevalidate(config, meetingDate) {
+  const meetingDateText = formatDate(meetingDate);
+  const run = loadReportRun(config.env.outputDir, meetingDateText, config.env.runId);
+  const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
+  const reportPath = buildOutputPath(meetingDate, config);
+  const generationStatePath = buildGenerationStatePath(reportPath);
+
+  assertGenerationStateOwned(generationStatePath, run.state.attemptId);
+  assertRunInputs(run.state, snapshot, run.catalog, {
+    attemptId: config.env.runId,
+    meetingDate: meetingDateText,
+    reportDepth: Number(config.env.reportDepth),
+  });
+  if (run.state.status !== "validation_failed") {
+    throw new Error(`revalidate requires validation_failed state, got ${run.state.status}`);
+  }
+
+  const annotated = fs.readFileSync(run.paths.workingDraftPath, "utf8");
+  const result = validateAnnotatedReport(snapshot.rawContent, annotated, run.catalog, {
+    attemptId: run.state.attemptId,
+    meetingDate: meetingDateText,
+    reportDepth: Number(config.env.reportDepth),
+    snapshotHash: snapshot.contentHash,
+    snapshotPath,
+    sectionHeader: config.env.sectionHeader,
+    repos: config.repos,
+    openIssueVerifierOptions: config.openIssueVerifierOptions,
+  });
+  const publishable = isPublishable(result.validation);
+  if (publishable) {
+    result.validation.cleanReportHash = sha256(result.cleanContent);
+  }
+  const revision = appendValidationRevision(
+    run.paths,
+    run.state.attemptId,
+    result.validation
+  );
+  const latestValidationPath = path.basename(revision.validationPath);
+
+  if (!publishable) {
+    updateRunState(run.paths, run.state.attemptId, { status: "validation_failed" });
+    writeOwnedOrThrow(generationStatePath, run.state.attemptId, {
+      status: "failed",
+      validationStatus: result.validation.status,
+      latestValidationPath,
+    });
+    return { ...result, runPaths: run.paths, reportPath };
+  }
+
+  promoteRunReport({
+    paths: run.paths,
+    reportPath,
+    generationStatePath,
+    cleanContent: result.cleanContent,
+    validation: result.validation,
+    generationState: {
+      ...revision.state,
+      status: "complete",
+      cleanReportHash: result.validation.cleanReportHash,
+      latestValidationPath,
+    },
+  });
+  return { ...result, runPaths: run.paths, reportPath };
+}
+
 function assertGenerationComplete(
   reportPath,
   snapshot,
@@ -511,8 +579,10 @@ async function main() {
     }
     case "update":
       return runUpdate(config, meetingDate);
+    case "revalidate":
+      return runRevalidate(config, meetingDate);
     default:
-      throw new Error(`Unknown MODE: ${config.env.mode}. Use collect, generate, or update.`);
+      throw new Error(`Unknown MODE: ${config.env.mode}. Use collect, generate, update, or revalidate.`);
   }
 }
 
@@ -532,6 +602,7 @@ module.exports = {
   runCollect,
   runGenerate,
   runGenerateV2,
+  runRevalidate,
   runUpdate,
   validateDraft,
   writeCandidates,
