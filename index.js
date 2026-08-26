@@ -12,6 +12,7 @@ const {
   writeJsonAtomic,
 } = require("./lib/report-artifact");
 const { collectSnapshot, loadSnapshot } = require("./lib/report-snapshot");
+const { withGenerationStateLock } = require("./lib/report-run");
 const {
   buildOutputPath,
   buildWikiUrl,
@@ -142,16 +143,23 @@ async function runCollect(config, meetingDate) {
 }
 
 function writeGenerationStateIfOwned(statePath, attemptId, patch) {
-  if (!fs.existsSync(statePath)) return false;
-  let current;
   try {
-    current = JSON.parse(fs.readFileSync(statePath, "utf8"));
+    return withGenerationStateLock(statePath, () => {
+      if (!fs.existsSync(statePath)) return false;
+      let current;
+      try {
+        current = JSON.parse(fs.readFileSync(statePath, "utf8"));
+      } catch (error) {
+        return false;
+      }
+      if (current.attemptId !== attemptId) return false;
+      writeJsonAtomic(statePath, { ...current, ...patch });
+      return true;
+    });
   } catch (error) {
-    return false;
+    if (error && error.code === "GENERATION_STATE_LOCKED") return false;
+    throw error;
   }
-  if (current.attemptId !== attemptId) return false;
-  writeJsonAtomic(statePath, { ...current, ...patch });
-  return true;
 }
 
 async function runGenerate(config, meetingDate) {
@@ -167,7 +175,9 @@ async function runGenerate(config, meetingDate) {
     attemptId: crypto.randomUUID(),
     startedAt,
   };
-  writeJsonAtomic(generationStatePath, { ...stateBase, status: "running" });
+  withGenerationStateLock(generationStatePath, () => {
+    writeJsonAtomic(generationStatePath, { ...stateBase, status: "running" });
+  });
 
   try {
     writeCandidates(snapshot, snapshotPath, meetingDate, config);
