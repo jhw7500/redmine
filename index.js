@@ -259,6 +259,8 @@ async function runGenerateV2(config, meetingDate) {
     startedAt,
   };
   let runInitialized = false;
+  let aiStarted = false;
+  let aiComplete = false;
 
   withGenerationStateLock(generationStatePath, () => {
     writeJsonAtomic(generationStatePath, { ...generationStateBase, status: "running" });
@@ -296,11 +298,14 @@ async function runGenerateV2(config, meetingDate) {
       }, null, 2) + "\n"
     );
 
+    aiStarted = true;
     const generated = await generateContent(config, meetingDate, snapshot.rawContent, {
       factCatalog: catalog,
       prompt,
+      onRawAiOutput: (rawAiOutput) => {
+        writeImmutableArtifact(runPaths.aiDraftPath, rawAiOutput);
+      },
     });
-    writeImmutableArtifact(runPaths.aiDraftPath, generated.rawAiOutput);
     writeImmutableArtifact(runPaths.workingDraftPath, generated.content);
     updateRunState(runPaths, attemptId, {
       status: "ai_complete",
@@ -310,6 +315,7 @@ async function runGenerateV2(config, meetingDate) {
       },
       aiCompletedAt: new Date().toISOString(),
     });
+    aiComplete = true;
 
     const result = validateAnnotatedReport(
       snapshot.rawContent,
@@ -326,13 +332,14 @@ async function runGenerateV2(config, meetingDate) {
         openIssueVerifierOptions: config.openIssueVerifierOptions,
       }
     );
-    if (result.validation.status === "PASS") {
+    result.validation.publishable = isPublishable(result.validation);
+    if (result.validation.publishable) {
       result.validation.cleanReportHash = sha256(result.cleanContent);
     }
     const revision = appendValidationRevision(runPaths, attemptId, result.validation);
     const latestValidationPath = path.basename(revision.validationPath);
 
-    if (result.validation.status !== "PASS") {
+    if (!result.validation.publishable) {
       updateRunState(runPaths, attemptId, { status: "validation_failed" });
       writeOwnedOrThrow(generationStatePath, attemptId, {
         status: "failed",
@@ -375,12 +382,12 @@ async function runGenerateV2(config, meetingDate) {
       validation: result.validation,
     };
   } catch (error) {
-    if (runInitialized && error && /^AI_/.test(error.code || "")) {
+    if (runInitialized && aiStarted && !aiComplete) {
       try {
         updateRunState(runPaths, attemptId, {
           status: "ai_failed",
           failedAt: new Date().toISOString(),
-          errorCode: error.code,
+          errorCode: error && error.code ? error.code : "GENERATE_FAILED",
         });
       } catch (stateError) {
         if (!/transition|attempt/i.test(stateError.message)) throw stateError;
