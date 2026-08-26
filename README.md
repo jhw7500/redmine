@@ -33,6 +33,12 @@ Optional env vars
 - `PRESENTATION_NOTE_THRESHOLD` (자동 발표노트 후보 점수, 기본 5)
 - `LEADER_HIGHLIGHT` (default: 0 — 팀장 회의 보고용 중요 항목 밑줄(`<u>`) 강조. 1=사용. repo-config.json `reportFilter.leaderHighlight.enabled`보다 우선)
 - `LEADER_HIGHLIGHT_MAX` (default: 0 = 무제한 — 밑줄 최대 줄 수. N>0이면 AI에 상한 지시. repo-config.json `reportFilter.leaderHighlight.maxLines`보다 우선)
+- `AI_SUMMARIZE` (`1`이면 generate 단계에서 Claude 요약 사용. 미설정 시 원본 초안 사용)
+- `AI_MODEL` (default: `sonnet` — 주간보고 전용 모델. 사용자 전역 모델을 상속하지 않음)
+- `AI_EFFORT` (default: `low`; `low|medium|high|xhigh|max`)
+- `AI_MAX_INPUT_CHARS` (default: `100000` — Claude에 전달할 전체 prompt 문자 수 상한. 초과 시 호출 전 중단)
+- `AI_TIMEOUT_MS` (default: `300000` — Claude 단일 호출 timeout, 양의 정수)
+- `AI_MAX_BUDGET_USD` (선택 — 설정 시 Claude CLI `--max-budget-usd`로 전달, 양수)
 - `AI_EN_PATH` (default: /home/jhw/ai/codex/redmine-auto/templates/ai-en.md)
 - `AI_KO_PATH` (default: /home/jhw/ai/codex/redmine-auto/templates/ai-ko.md)
 - `GITHUB_TOKEN` (optional: enables PR title lookup)
@@ -64,10 +70,21 @@ Mode boundaries
 - `generate`: 기존 sealed snapshot만 읽음. 수집하지 않고 AI 요약·사실 검증 후 depth 파일 저장.
 - `update`: 수집/AI 호출 없음. snapshot과 depth 파일을 재검증한 후 Redmine 반영.
 
+AI 요약은 호출당 1회로 고정하며 `--safe-mode --tools "" --no-session-persistence`로 실행한다.
+따라서 프로젝트 plugin·hook·MCP와 사용자 전역 모델/effort를 불러오지 않는다. AI가 활성화된
+상태에서 입력 상한, quota, timeout, CLI 실행 또는 빈 응답 오류가 발생하면 `generate`를 실패시키고
+raw 초안으로 대체하지 않는다. `update`는 기존처럼 별도 실행이지만 실패한 generate 뒤에는 게시 단계로 진행하지 않는다.
+각 generate 시도는 `.generation.json`을 먼저 `running`으로 기록하고 모든 생성·검증이 끝나야
+`complete`로 바꾼다. `update`는 동일 meeting date·depth·snapshot hash의 `complete` 증거가 없으면
+Redmine API 호출 전에 중단하므로, 같은 날짜의 이전 초안이 남아 있어도 실패한 시도 뒤에 게시하지 않는다.
+cron wrapper는 `out/report-run.lock`의 비차단 `flock`을 사용한다. 이전 collect/generate/update가
+끝나지 않았으면 겹쳐 실행하지 않고 exit 75로 실패·알림 처리한다.
+
 Artifacts
 - `out/report-YYYY-MM-DD.snapshot.json`: 수집 원본, 범위, source 상태, content hash를 포함한 sealed snapshot
 - `out/presentation-candidates-YYYY-MM-DD.json`: 발표노트 태그·자동 후보와 판정 근거
 - `out/jo-hyunwoo-YYYY-MM-DD.depthN.md`: depth별 초안
+- `out/jo-hyunwoo-YYYY-MM-DD.depthN.generation.json`: generate 시도 상태와 snapshot 결속 정보
 - `out/jo-hyunwoo-YYYY-MM-DD.depthN.validation.json`: snapshot/report hash와 사실검증 결과
 - `out/jo-hyunwoo-YYYY-MM-DD.depthN.published.md`: Redmine에 실제 반영한 최종 조현우 섹션
 

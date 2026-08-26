@@ -316,6 +316,10 @@
     "outputDir": "out",
     "githubOwner": "jhw7500",
     "claudeCli": "claude",
+    "aiModel": "sonnet",
+    "aiEffort": "low",
+    "aiMaxInputChars": 100000,
+    "aiTimeoutMs": 300000,
     "reportDepth": 2
   },
   "depthProfiles": {

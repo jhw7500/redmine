@@ -60,7 +60,7 @@ repowire_conf_value() {
 # cron 실행은 실패해도 아무도 모른 채 지나간다 (2026-07-22·07-29 게시가 2주 연속
 # 조용히 누락된 원인). 실패를 반드시 눈에 띄게 남긴다.
 set +e
-node "$ROOT/index.js"
+bash "$ROOT/scripts/run-with-lock.sh" "$ROOT/out/report-run.lock" node "$ROOT/index.js"
 status=$?
 set -e
 

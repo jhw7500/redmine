@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const fs = require("fs");
 const { loadConfig } = require("./lib/config");
 const { validateReport } = require("./lib/fact-validator");
@@ -5,6 +6,7 @@ const { publishNotes } = require("./lib/notion-issue-publisher");
 const { selectPresentationNotes } = require("./lib/presentation-note-classifier");
 const {
   buildCandidatesPath,
+  buildGenerationStatePath,
   buildPublishedPath,
   buildValidationPath,
   writeJsonAtomic,
@@ -56,8 +58,10 @@ function writeCandidates(snapshot, snapshotPath, meetingDate, config) {
   return candidatesPath;
 }
 
-function validateDraft(snapshot, snapshotPath, reportPath, meetingDate, config) {
-  const reportContent = fs.readFileSync(reportPath, "utf8");
+function validateDraft(snapshot, snapshotPath, reportPath, meetingDate, config, options = {}) {
+  const reportContent = Object.prototype.hasOwnProperty.call(options, "reportContent")
+    ? String(options.reportContent)
+    : fs.readFileSync(reportPath, "utf8");
   const validation = validateReport(snapshot.rawContent, reportContent, {
     meetingDate: formatDate(meetingDate),
     reportDepth: config.env.reportDepth,
@@ -137,24 +141,105 @@ async function runCollect(config, meetingDate) {
   return result;
 }
 
+function writeGenerationStateIfOwned(statePath, attemptId, patch) {
+  if (!fs.existsSync(statePath)) return false;
+  let current;
+  try {
+    current = JSON.parse(fs.readFileSync(statePath, "utf8"));
+  } catch (error) {
+    return false;
+  }
+  if (current.attemptId !== attemptId) return false;
+  writeJsonAtomic(statePath, { ...current, ...patch });
+  return true;
+}
+
 async function runGenerate(config, meetingDate) {
   const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
-  writeCandidates(snapshot, snapshotPath, meetingDate, config);
-  const reportPath = await generate(
-    config,
-    meetingDate,
-    snapshot.autoContent,
-    [],
-    { rawContent: snapshot.rawContent }
-  );
-  const validationResult = validateDraft(
-    snapshot,
-    snapshotPath,
-    reportPath,
-    meetingDate,
-    config
-  );
-  return { snapshot, snapshotPath, reportPath, ...validationResult };
+  const expectedReportPath = buildOutputPath(meetingDate, config);
+  const generationStatePath = buildGenerationStatePath(expectedReportPath);
+  const startedAt = new Date().toISOString();
+  const stateBase = {
+    schemaVersion: 1,
+    meetingDate: formatDate(meetingDate),
+    reportDepth: Number(config.env.reportDepth),
+    snapshotHash: snapshot.contentHash,
+    attemptId: crypto.randomUUID(),
+    startedAt,
+  };
+  writeJsonAtomic(generationStatePath, { ...stateBase, status: "running" });
+
+  try {
+    writeCandidates(snapshot, snapshotPath, meetingDate, config);
+    const reportPath = await generate(
+      config,
+      meetingDate,
+      snapshot.autoContent,
+      [],
+      { rawContent: snapshot.rawContent }
+    );
+    const validationResult = validateDraft(
+      snapshot,
+      snapshotPath,
+      reportPath,
+      meetingDate,
+      config
+    );
+    const completed = writeGenerationStateIfOwned(generationStatePath, stateBase.attemptId, {
+      status: "complete",
+      completedAt: new Date().toISOString(),
+      validationStatus: validationResult.validation.status,
+    });
+    if (!completed) {
+      const error = new Error("새 generate 시도가 이 실행을 대체했습니다.");
+      error.code = "GENERATION_SUPERSEDED";
+      throw error;
+    }
+    return { snapshot, snapshotPath, reportPath, generationStatePath, ...validationResult };
+  } catch (error) {
+    writeGenerationStateIfOwned(generationStatePath, stateBase.attemptId, {
+      status: "failed",
+      failedAt: new Date().toISOString(),
+      errorCode: error && error.code ? error.code : "GENERATE_FAILED",
+    });
+    throw error;
+  }
+}
+
+function assertGenerationComplete(
+  reportPath,
+  snapshot,
+  meetingDate,
+  config,
+  expectedAttemptId = null
+) {
+  const statePath = buildGenerationStatePath(reportPath);
+  if (!fs.existsSync(statePath)) {
+    throw new Error(`generation state is not complete: missing ${statePath}`);
+  }
+
+  let state;
+  try {
+    state = JSON.parse(fs.readFileSync(statePath, "utf8"));
+  } catch (error) {
+    throw new Error(`generation state is not complete: unreadable ${statePath}`);
+  }
+
+  const expectedDate = formatDate(meetingDate);
+  const expectedDepth = Number(config.env.reportDepth);
+  if (
+    state.schemaVersion !== 1 ||
+    state.status !== "complete" ||
+    state.snapshotHash !== snapshot.contentHash ||
+    state.meetingDate !== expectedDate ||
+    state.reportDepth !== expectedDepth ||
+    (expectedAttemptId !== null && state.attemptId !== expectedAttemptId)
+  ) {
+    throw new Error(
+      `generation state is not complete for snapshot/date/depth: ${statePath}`
+    );
+  }
+  return { state, statePath };
 }
 
 function buildIssueEnv(config) {
@@ -172,6 +257,8 @@ async function runUpdate(config, meetingDate) {
   if (!fs.existsSync(reportPath)) {
     throw new Error(`초안 파일이 없습니다: ${reportPath}`);
   }
+  const generation = assertGenerationComplete(reportPath, snapshot, meetingDate, config);
+  const reportContent = fs.readFileSync(reportPath, "utf8");
 
   writeCandidates(snapshot, snapshotPath, meetingDate, config);
   const { validation, validationPath } = validateDraft(
@@ -179,7 +266,8 @@ async function runUpdate(config, meetingDate) {
     snapshotPath,
     reportPath,
     meetingDate,
-    config
+    config,
+    { reportContent }
   );
   assertPublishable(validation, config);
 
@@ -202,7 +290,18 @@ async function runUpdate(config, meetingDate) {
     : null;
 
   const publishedPath = buildPublishedPath(reportPath);
-  const result = await update(config, meetingDate, { loadNoteRefs, publishedPath });
+  const result = await update(config, meetingDate, {
+    assertReady: () => assertGenerationComplete(
+      reportPath,
+      snapshot,
+      meetingDate,
+      config,
+      generation.state.attemptId
+    ),
+    draftContent: reportContent,
+    loadNoteRefs,
+    publishedPath,
+  });
   return {
     snapshot,
     snapshotPath,
@@ -246,6 +345,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  assertGenerationComplete,
   assertPublishable,
   isPublishable,
   main,
@@ -255,4 +355,5 @@ module.exports = {
   runUpdate,
   validateDraft,
   writeCandidates,
+  writeGenerationStateIfOwned,
 };
