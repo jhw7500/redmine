@@ -1,7 +1,7 @@
 # 주간보고 사실 계약 및 실패 산출물 재사용 설계
 
 - 작성일: 2026-08-26
-- 상태: 설계 승인 대기(사용자 리뷰)
+- 상태: 승인됨(2026-08-26)
 - 대상 저장소: `/home/jhw/ai/opencode/projects/redmine`
 - 관련 이슈: GitHub #25 `fix(report): validation 실패 시 AI 산출물 폐기율 축소 및 실패 원인 수렴`
 - 선행 작업: GitHub #24 AI 실행 예산 및 중복 게시 제한
@@ -190,7 +190,7 @@ out/runs/<meetingDate>/<attemptId>/
   report.clean.md             # 검증 성공 시에만 생성
 ```
 
-`prompt-input.json`에는 prompt 전체를 중복 저장하지 않고 snapshot path/hash, catalog hash, prompt hash, 모델 설정, 입력 문자 수를 저장한다. 실제 AI 응답은 `draft.ai.annotated.md`에 원문 그대로 보존하고, 같은 내용으로 `draft.working.annotated.md`를 최초 한 번 만든다. 이후 수동 편집은 working copy만 변경한다. `state.json`은 run 디렉터리 기준 상대 파일명인 `latestValidationPath`와 validation revision을 가리키며 이전 validation 파일은 덮어쓰지 않는다.
+`prompt-input.json`에는 prompt 전체를 중복 저장하지 않고 snapshot path/hash, catalog hash, prompt hash, 모델 설정, 입력 문자 수를 저장한다. Claude CLI payload는 기존 CLI framing/후행 system-block 제거까지만 적용하고, `sanitizeAiSection()` 적용 전 상태로 `draft.ai.annotated.md`에 원문 그대로 보존한다. `draft.working.annotated.md`는 `sanitizeAiSection()`을 한 번 결정적으로 적용한 결과로 최초 생성하며, sanitizer 적용 여부와 input/output hash를 `state.json`에 기록한다. 이후 수동 편집은 working copy만 변경한다. `state.json`은 run 디렉터리 기준 상대 파일명인 `latestValidationPath`와 validation revision을 가리키며 이전 validation 파일은 덮어쓰지 않는다.
 
 상태 전이:
 
@@ -274,9 +274,11 @@ schema v2 update는 다음을 모두 만족해야 Redmine 변경을 시작한다
 - canonical 보고서 hash가 validation의 `cleanReportHash`와 일치한다.
 - 게시 시점에도 구조, open-status 및 git pickaxe 검증을 다시 통과한다.
 
+schema v2의 marker·fact·snapshot/catalog/report hash 오류는 `VALIDATION_OVERRIDE=1`로도 우회할 수 없다. 이 오류들은 사람 승인으로 수용할 표현 차이가 아니라 게시할 내용과 검증 증거의 결속 실패이기 때문이다. 기존 schema v1의 override 동작은 호환 목적으로 유지한다.
+
 사실 검증은 생성 당시의 sealed snapshot/catalog와 clean report hash로 고정한다. 반면 최신 git 상태에 따라 결과가 달라질 수 있는 open-issue 검증은 update 직전에 다시 실행한다.
 
-schema v1 generation state는 기존 `validateDraft()` 경로로 처리한다. 이 호환 경로는 generate와 update 사이에 배포가 일어나도 기존 초안 게시를 불필요하게 막지 않기 위한 것이다.
+schema v1 generation state는 기존 `validateDraft()` 경로로 처리한다. 이 호환 경로는 generate와 update 사이에 배포가 일어나도 기존 초안 게시를 불필요하게 막지 않기 위한 것이다. `AI_SUMMARIZE=0`은 모델이 사실을 변환하지 않는 deterministic raw-content 경로이므로 schema v1 생성·검증을 유지한다. schema v2 fact marker 경로는 `AI_SUMMARIZE=1`인 새 generate에 적용한다.
 
 발표노트 Issue 생성과 Redmine Wiki PUT은 위 게이트를 모두 지난 뒤에만 실행한다.
 
@@ -316,6 +318,8 @@ schema v1 generation state는 기존 `validateDraft()` 경로로 처리한다. �
 - 하나의 초안에서 여러 섹션 오류가 모두 진단된다.
 - 잘못된 UUID, 경로 탈출, snapshot/catalog hash 불일치를 차단한다.
 - schema v1 update 호환과 schema v2 hash 게이트를 각각 검증한다.
+- `VALIDATION_OVERRIDE=1`이어도 schema v2 marker·fact·hash 오류는 게시를 차단한다.
+- `AI_SUMMARIZE=0`은 Claude 호출과 marker 요구 없이 기존 schema v1 deterministic 경로로 동작한다.
 
 ### 12.5 외부 경계 테스트
 
@@ -344,6 +348,8 @@ schema v1 generation state는 기존 `validateDraft()` 경로로 처리한다. �
 - [ ] validation 실패 하나가 다른 섹션의 진단을 가리지 않는다.
 - [ ] 실제 `5/8`, `10건 PASS, 실패 1건`, `16개` 사고 fixture가 회귀 테스트에 포함된다.
 - [ ] schema v1 배포 중간 호환과 schema v2 publish hash 게이트가 검증된다.
+- [ ] schema v2 사실·hash 오류는 `VALIDATION_OVERRIDE=1`로도 우회할 수 없다.
+- [ ] `AI_SUMMARIZE=0` deterministic 경로는 기존 schema v1 동작을 유지한다.
 - [ ] 기본 generate 경로의 Claude 호출 상한은 1회이며 validation 실패 재호출은 0회다.
 
 ## 15. 결정 사항
@@ -354,4 +360,6 @@ schema v1 generation state는 기존 `validateDraft()` 경로로 처리한다. �
 - 실패 산출물은 canonical 보고서와 분리해 run ID로 보존한다.
 - 수동 수정 진입점은 annotated draft + `MODE=revalidate`다.
 - clean 보고서 직접 수정은 schema v2 update에서 차단한다.
+- schema v2 사실·hash 오류는 validation override 대상이 아니다.
+- `AI_SUMMARIZE=0` generate는 schema v1 호환 경로를 사용한다.
 - run artifact 자동 삭제는 후속 정책으로 남기고 #25에 포함하지 않는다.
