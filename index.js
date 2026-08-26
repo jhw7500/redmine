@@ -3,7 +3,11 @@ const fs = require("fs");
 const path = require("path");
 const { loadConfig } = require("./lib/config");
 const { buildFactCatalog } = require("./lib/fact-catalog");
-const { validateAnnotatedReport, validateReport } = require("./lib/fact-validator");
+const {
+  validateAnnotatedReport,
+  validateNonFactRules,
+  validateReport,
+} = require("./lib/fact-validator");
 const { publishNotes } = require("./lib/notion-issue-publisher");
 const { selectPresentationNotes } = require("./lib/presentation-note-classifier");
 const {
@@ -100,7 +104,42 @@ function validateDraft(snapshot, snapshotPath, reportPath, meetingDate, config, 
   return { validation, validationPath };
 }
 
+const NON_OVERRIDABLE_V2_CODES = new Set([
+  "malformed_fact_marker",
+  "unknown_fact_id",
+  "fact_value_mismatch",
+  "fact_subject_mismatch",
+  "unmarked_protected_fact",
+  "snapshot_hash_mismatch",
+  "catalog_hash_mismatch",
+  "annotated_draft_hash_mismatch",
+  "clean_report_hash_mismatch",
+  "validation_path_mismatch",
+  "attempt_ownership_mismatch",
+  "run_path_mismatch",
+]);
+
+function hasNonOverridableV2Issue(validation) {
+  return Boolean(
+    validation
+    && validation.schemaVersion === 2
+    && (validation.issues || []).some(
+      (issue) => NON_OVERRIDABLE_V2_CODES.has(issue.code)
+    )
+  );
+}
+
 function assertPublishable(validation, config) {
+  if (hasNonOverridableV2Issue(validation)) {
+    const issue = validation.issues.find(
+      (candidate) => NON_OVERRIDABLE_V2_CODES.has(candidate.code)
+    );
+    const error = new Error(
+      `schema v2 validation issue cannot be overridden: ${issue.code}`
+    );
+    error.code = issue.code;
+    throw error;
+  }
   if (isPublishable(validation)) {
     if (validation.status === "WARNING") {
       // 어떤 경고를 수동 확인해야 하는지 cron 로그만 보고 알 수 있어야 한다.
@@ -474,8 +513,18 @@ function assertGenerationComplete(
 
   const expectedDate = formatDate(meetingDate);
   const expectedDepth = Number(config.env.reportDepth);
+  if (state.schemaVersion === 2 && state.snapshotHash !== snapshot.contentHash) {
+    throw evidenceError("snapshot_hash_mismatch", "generation snapshot hash mismatch");
+  }
   if (
-    state.schemaVersion !== 1 ||
+    state.schemaVersion === 2
+    && expectedAttemptId !== null
+    && state.attemptId !== expectedAttemptId
+  ) {
+    throw evidenceError("attempt_ownership_mismatch", "generation attempt ownership mismatch");
+  }
+  if (
+    ![1, 2].includes(state.schemaVersion) ||
     state.status !== "complete" ||
     state.snapshotHash !== snapshot.contentHash ||
     state.meetingDate !== expectedDate ||
@@ -487,6 +536,187 @@ function assertGenerationComplete(
     );
   }
   return { state, statePath };
+}
+
+function evidenceError(code, message, cause) {
+  const error = new Error(message, cause ? { cause } : undefined);
+  error.code = code;
+  return error;
+}
+
+function readEvidenceJson(filePath, code, label) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch (error) {
+    throw evidenceError(code, `${label} is missing or unreadable: ${filePath}`, error);
+  }
+}
+
+function mapRunEvidenceError(error) {
+  const message = String(error && error.message);
+  if (/snapshot hash/i.test(message)) {
+    return evidenceError("snapshot_hash_mismatch", message, error);
+  }
+  if (/catalog hash/i.test(message)) {
+    return evidenceError("catalog_hash_mismatch", message, error);
+  }
+  if (/attempt|ownership/i.test(message)) {
+    return evidenceError("attempt_ownership_mismatch", message, error);
+  }
+  return evidenceError("run_path_mismatch", message, error);
+}
+
+function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, config }) {
+  const reportPath = buildOutputPath(meetingDate, config);
+  let current;
+  try {
+    current = assertGenerationComplete(
+      reportPath,
+      snapshot,
+      meetingDate,
+      config,
+      state && state.attemptId
+    ).state;
+  } catch (error) {
+    if (NON_OVERRIDABLE_V2_CODES.has(error && error.code)) throw error;
+    if (state && state.snapshotHash !== snapshot.contentHash) {
+      throw evidenceError("snapshot_hash_mismatch", "snapshot hash mismatch", error);
+    }
+    throw evidenceError("attempt_ownership_mismatch", error.message, error);
+  }
+  if (current.schemaVersion !== 2 || !state || state.schemaVersion !== 2) {
+    throw evidenceError("attempt_ownership_mismatch", "schema v2 publish evidence is required");
+  }
+  if (current.attemptId !== state.attemptId) {
+    throw evidenceError("attempt_ownership_mismatch", "attempt ownership mismatch");
+  }
+
+  let run;
+  try {
+    run = loadReportRun(
+      config.env.outputDir,
+      formatDate(meetingDate),
+      current.attemptId
+    );
+    assertRunInputs(run.state, snapshot, run.catalog, {
+      attemptId: current.attemptId,
+      meetingDate: formatDate(meetingDate),
+      reportDepth: Number(config.env.reportDepth),
+    });
+  } catch (error) {
+    throw mapRunEvidenceError(error);
+  }
+
+  if (
+    current.runDir !== run.paths.runDir
+    || run.state.status !== "complete"
+  ) {
+    throw evidenceError("run_path_mismatch", "run path or completion state mismatch");
+  }
+  if (current.catalogHash !== run.state.catalogHash) {
+    throw evidenceError("catalog_hash_mismatch", "catalog hash mismatch");
+  }
+
+  const latestValidationPath = current.latestValidationPath;
+  const expectedValidationPath = Number.isInteger(run.state.validationRevision)
+    ? `validation.${String(run.state.validationRevision).padStart(3, "0")}.json`
+    : null;
+  if (
+    typeof latestValidationPath !== "string"
+    || path.basename(latestValidationPath) !== latestValidationPath
+    || !/^validation\.\d{3}\.json$/.test(latestValidationPath)
+    || run.state.latestValidationPath !== latestValidationPath
+    || expectedValidationPath !== latestValidationPath
+  ) {
+    throw evidenceError("validation_path_mismatch", "validation path ownership mismatch");
+  }
+  const validationPath = path.join(run.paths.runDir, latestValidationPath);
+  let realValidationPath;
+  try {
+    realValidationPath = fs.realpathSync(validationPath);
+  } catch (error) {
+    throw evidenceError(
+      "validation_path_mismatch",
+      `validation path is missing: ${validationPath}`,
+      error
+    );
+  }
+  if (path.dirname(realValidationPath) !== run.paths.runDir) {
+    throw evidenceError("validation_path_mismatch", "validation path escapes run directory");
+  }
+  const validation = readEvidenceJson(
+    realValidationPath,
+    "validation_path_mismatch",
+    "validation evidence"
+  );
+  if (
+    validation.schemaVersion !== 2
+    || validation.attemptId !== current.attemptId
+    || run.state.attemptId !== current.attemptId
+  ) {
+    throw evidenceError("attempt_ownership_mismatch", "validation attempt ownership mismatch");
+  }
+  if (validation.snapshotHash !== current.snapshotHash) {
+    throw evidenceError("snapshot_hash_mismatch", "validation snapshot hash mismatch");
+  }
+  if (
+    validation.catalogHash !== current.catalogHash
+    || validation.catalogHash !== run.catalog.catalogHash
+  ) {
+    throw evidenceError("catalog_hash_mismatch", "validation catalog hash mismatch");
+  }
+  if (hasNonOverridableV2Issue(validation)) {
+    assertPublishable(validation, config);
+  }
+  if (!isPublishable(validation)) {
+    throw evidenceError("clean_report_hash_mismatch", "validation evidence is not publishable");
+  }
+
+  let annotatedContent;
+  let runCleanContent;
+  let canonicalContent;
+  try {
+    annotatedContent = fs.readFileSync(run.paths.workingDraftPath, "utf8");
+    runCleanContent = fs.readFileSync(run.paths.cleanReportPath, "utf8");
+    canonicalContent = fs.readFileSync(reportPath, "utf8");
+  } catch (error) {
+    throw evidenceError("clean_report_hash_mismatch", "run draft or clean report is missing", error);
+  }
+  if (sha256(annotatedContent) !== validation.annotatedDraftHash) {
+    throw evidenceError("annotated_draft_hash_mismatch", "annotated draft hash mismatch");
+  }
+  const expectedCleanHash = validation.cleanReportHash;
+  if (
+    !expectedCleanHash
+    || current.cleanReportHash !== expectedCleanHash
+    || sha256(runCleanContent) !== expectedCleanHash
+    || sha256(canonicalContent) !== expectedCleanHash
+    || canonicalContent !== reportContent
+    || sha256(reportContent) !== expectedCleanHash
+  ) {
+    throw evidenceError("clean_report_hash_mismatch", "clean report hash mismatch");
+  }
+
+  return { validation, run };
+}
+
+function buildPublishTimeValidation(evidenceValidation, publishTime) {
+  const issues = [...(publishTime.issues || [])];
+  const status = issues.some((issue) => issue.severity === "error")
+    ? "FAIL"
+    : issues.some((issue) => issue.severity === "warning")
+      ? "WARNING"
+      : "PASS";
+  return {
+    ...evidenceValidation,
+    status,
+    checkedAt: new Date().toISOString(),
+    facts: {
+      ...(evidenceValidation.facts || {}),
+      openIssueChecks: [...(publishTime.openIssueChecks || [])],
+    },
+    issues,
+  };
 }
 
 function buildIssueEnv(config) {
@@ -507,16 +737,43 @@ async function runUpdate(config, meetingDate) {
   const generation = assertGenerationComplete(reportPath, snapshot, meetingDate, config);
   const reportContent = fs.readFileSync(reportPath, "utf8");
 
-  writeCandidates(snapshot, snapshotPath, meetingDate, config);
-  const { validation, validationPath } = validateDraft(
-    snapshot,
-    snapshotPath,
-    reportPath,
-    meetingDate,
-    config,
-    { reportContent }
-  );
+  let validation;
+  let validationPath;
+  if (generation.state.schemaVersion === 2) {
+    const evidence = assertV2PublishEvidence({
+      state: generation.state,
+      reportContent,
+      snapshot,
+      meetingDate,
+      config,
+    });
+    const publishTime = validateNonFactRules(reportContent, {
+      meetingDate: formatDate(meetingDate),
+      reportDepth: Number(config.env.reportDepth),
+      snapshotHash: snapshot.contentHash,
+      sectionHeader: config.env.sectionHeader,
+      repos: config.repos,
+      openIssueVerifierOptions: config.openIssueVerifierOptions,
+    });
+    validation = buildPublishTimeValidation(evidence.validation, publishTime);
+    validationPath = path.join(
+      evidence.run.paths.runDir,
+      generation.state.latestValidationPath
+    );
+  } else {
+    const legacy = validateDraft(
+      snapshot,
+      snapshotPath,
+      reportPath,
+      meetingDate,
+      config,
+      { reportContent }
+    );
+    validation = legacy.validation;
+    validationPath = legacy.validationPath;
+  }
   assertPublishable(validation, config);
+  writeCandidates(snapshot, snapshotPath, meetingDate, config);
 
   // 발표노트 자동 등록은 프로젝트 정책상 운영 프로필인 depth3 update에서만 수행한다.
   const candidates = Number(config.env.reportDepth) === 3
@@ -538,13 +795,21 @@ async function runUpdate(config, meetingDate) {
 
   const publishedPath = buildPublishedPath(reportPath);
   const result = await update(config, meetingDate, {
-    assertReady: () => assertGenerationComplete(
-      reportPath,
-      snapshot,
-      meetingDate,
-      config,
-      generation.state.attemptId
-    ),
+    assertReady: () => generation.state.schemaVersion === 2
+      ? assertV2PublishEvidence({
+        state: generation.state,
+        reportContent,
+        snapshot,
+        meetingDate,
+        config,
+      })
+      : assertGenerationComplete(
+        reportPath,
+        snapshot,
+        meetingDate,
+        config,
+        generation.state.attemptId
+      ),
     draftContent: reportContent,
     loadNoteRefs,
     publishedPath,
@@ -596,6 +861,9 @@ if (require.main === module) {
 module.exports = {
   assertGenerationComplete,
   assertPublishable,
+  assertV2PublishEvidence,
+  buildPublishTimeValidation,
+  hasNonOverridableV2Issue,
   isPublishable,
   main,
   resolveRunMeetingDate,
