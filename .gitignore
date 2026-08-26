@@ -7,3 +7,4 @@ out/
 .serena/
 .vscode/
 .context/
+.worktrees/
