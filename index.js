@@ -356,6 +356,7 @@ async function runGenerateV2(config, meetingDate) {
       result.validation.cleanReportHash = sha256(result.cleanContent);
     }
     const revision = appendValidationRevision(runPaths, attemptId, result.validation);
+    result.validation = revision.validation;
     const latestValidationPath = path.basename(revision.validationPath);
 
     if (!result.validation.publishable) {
@@ -365,6 +366,8 @@ async function runGenerateV2(config, meetingDate) {
         failedAt: new Date().toISOString(),
         validationStatus: result.validation.status,
         latestValidationPath,
+        latestValidationHash: revision.validationHash,
+        validationRevision: revision.revision,
       });
       return {
         snapshot,
@@ -389,6 +392,8 @@ async function runGenerateV2(config, meetingDate) {
         catalogHash: catalog.catalogHash,
         validationStatus: result.validation.status,
         latestValidationPath,
+        latestValidationHash: revision.validationHash,
+        validationRevision: revision.revision,
         cleanReportHash: result.validation.cleanReportHash,
       },
     });
@@ -464,6 +469,7 @@ async function runRevalidate(config, meetingDate) {
     run.state.attemptId,
     result.validation
   );
+  result.validation = revision.validation;
   const latestValidationPath = path.basename(revision.validationPath);
 
   if (!publishable) {
@@ -472,6 +478,8 @@ async function runRevalidate(config, meetingDate) {
       status: "failed",
       validationStatus: result.validation.status,
       latestValidationPath,
+      latestValidationHash: revision.validationHash,
+      validationRevision: revision.revision,
     });
     return { ...result, runPaths: run.paths, reportPath };
   }
@@ -513,6 +521,28 @@ function assertGenerationComplete(
 
   const expectedDate = formatDate(meetingDate);
   const expectedDepth = Number(config.env.reportDepth);
+  if (state.schemaVersion === 1) {
+    const v2OwnershipFields = [
+      "runDir",
+      "catalogHash",
+      "latestValidationPath",
+      "latestValidationHash",
+      "validationRevision",
+      "cleanReportHash",
+    ];
+    const hasV2Ownership = v2OwnershipFields.some((field) => Object.hasOwn(state, field));
+    let matchingV2RunExists = false;
+    try {
+      matchingV2RunExists = fs.existsSync(
+        buildRunPaths(config.env.outputDir, expectedDate, state.attemptId).runDir
+      );
+    } catch (error) {
+      matchingV2RunExists = false;
+    }
+    if (hasV2Ownership || matchingV2RunExists) {
+      throw new Error("schema v2 downgrade detected in generation state");
+    }
+  }
   if (state.schemaVersion === 2 && state.snapshotHash !== snapshot.contentHash) {
     throw evidenceError("snapshot_hash_mismatch", "generation snapshot hash mismatch");
   }
@@ -542,14 +572,6 @@ function evidenceError(code, message, cause) {
   const error = new Error(message, cause ? { cause } : undefined);
   error.code = code;
   return error;
-}
-
-function readEvidenceJson(filePath, code, label) {
-  try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
-  } catch (error) {
-    throw evidenceError(code, `${label} is missing or unreadable: ${filePath}`, error);
-  }
 }
 
 function mapRunEvidenceError(error) {
@@ -627,6 +649,8 @@ function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, 
     || !/^validation\.\d{3}\.json$/.test(latestValidationPath)
     || run.state.latestValidationPath !== latestValidationPath
     || expectedValidationPath !== latestValidationPath
+    || current.validationRevision !== run.state.validationRevision
+    || current.latestValidationHash !== run.state.latestValidationHash
   ) {
     throw evidenceError("validation_path_mismatch", "validation path ownership mismatch");
   }
@@ -644,11 +668,28 @@ function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, 
   if (path.dirname(realValidationPath) !== run.paths.runDir) {
     throw evidenceError("validation_path_mismatch", "validation path escapes run directory");
   }
-  const validation = readEvidenceJson(
-    realValidationPath,
-    "validation_path_mismatch",
-    "validation evidence"
-  );
+  let validationText;
+  let validation;
+  try {
+    validationText = fs.readFileSync(realValidationPath, "utf8");
+    validation = JSON.parse(validationText);
+  } catch (error) {
+    throw evidenceError(
+      "validation_path_mismatch",
+      `validation evidence is missing or unreadable: ${realValidationPath}`,
+      error
+    );
+  }
+  if (
+    validation.revision !== run.state.validationRevision
+    || !run.state.latestValidationHash
+    || sha256(validationText) !== run.state.latestValidationHash
+  ) {
+    throw evidenceError(
+      "validation_path_mismatch",
+      "validation artifact hash mismatch or intrinsic revision mismatch"
+    );
+  }
   if (
     validation.schemaVersion !== 2
     || validation.attemptId !== current.attemptId
@@ -775,6 +816,22 @@ async function runUpdate(config, meetingDate) {
   assertPublishable(validation, config);
   writeCandidates(snapshot, snapshotPath, meetingDate, config);
 
+  const assertReady = () => generation.state.schemaVersion === 2
+    ? assertV2PublishEvidence({
+      state: generation.state,
+      reportContent,
+      snapshot,
+      meetingDate,
+      config,
+    })
+    : assertGenerationComplete(
+      reportPath,
+      snapshot,
+      meetingDate,
+      config,
+      generation.state.attemptId
+    );
+
   // 발표노트 자동 등록은 프로젝트 정책상 운영 프로필인 depth3 update에서만 수행한다.
   const candidates = Number(config.env.reportDepth) === 3
     ? selectPresentationNotes(
@@ -787,7 +844,7 @@ async function runUpdate(config, meetingDate) {
       if (!process.env.NOTION_API_KEY) {
         throw new Error("발표노트 Issue 생성에 NOTION_API_KEY가 필요합니다.");
       }
-      const refs = await publishNotes(buildIssueEnv(config), candidates, {});
+      const refs = await publishNotes(buildIssueEnv(config), candidates, { assertReady });
       console.log(`[issue] presentation notes: ${refs.length}`);
       return refs;
     }
@@ -795,21 +852,7 @@ async function runUpdate(config, meetingDate) {
 
   const publishedPath = buildPublishedPath(reportPath);
   const result = await update(config, meetingDate, {
-    assertReady: () => generation.state.schemaVersion === 2
-      ? assertV2PublishEvidence({
-        state: generation.state,
-        reportContent,
-        snapshot,
-        meetingDate,
-        config,
-      })
-      : assertGenerationComplete(
-        reportPath,
-        snapshot,
-        meetingDate,
-        config,
-        generation.state.attemptId
-      ),
+    assertReady,
     draftContent: reportContent,
     loadNoteRefs,
     publishedPath,
