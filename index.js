@@ -1,7 +1,9 @@
 const crypto = require("crypto");
 const fs = require("fs");
+const path = require("path");
 const { loadConfig } = require("./lib/config");
-const { validateReport } = require("./lib/fact-validator");
+const { buildFactCatalog } = require("./lib/fact-catalog");
+const { validateAnnotatedReport, validateReport } = require("./lib/fact-validator");
 const { publishNotes } = require("./lib/notion-issue-publisher");
 const { selectPresentationNotes } = require("./lib/presentation-note-classifier");
 const {
@@ -9,16 +11,27 @@ const {
   buildGenerationStatePath,
   buildPublishedPath,
   buildValidationPath,
+  sha256,
   writeJsonAtomic,
 } = require("./lib/report-artifact");
 const { collectSnapshot, loadSnapshot } = require("./lib/report-snapshot");
-const { withGenerationStateLock } = require("./lib/report-run");
+const {
+  appendValidationRevision,
+  buildRunPaths,
+  initializeReportRun,
+  promoteRunReport,
+  updateRunState,
+  withGenerationStateLock,
+  writeImmutableArtifact,
+} = require("./lib/report-run");
 const {
   buildOutputPath,
   buildWikiUrl,
+  buildAiPrompt,
   extractTitleFromUrl,
   formatDate,
   generate,
+  generateContent,
   parseMeetingDateFromTitle,
   resolveMeetingDate,
   targetWednesday,
@@ -162,7 +175,7 @@ function writeGenerationStateIfOwned(statePath, attemptId, patch) {
   }
 }
 
-async function runGenerate(config, meetingDate) {
+async function runGenerateV1(config, meetingDate) {
   const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
   const expectedReportPath = buildOutputPath(meetingDate, config);
   const generationStatePath = buildGenerationStatePath(expectedReportPath);
@@ -214,6 +227,178 @@ async function runGenerate(config, meetingDate) {
     });
     throw error;
   }
+}
+
+function generationSupersededError() {
+  const error = new Error("새 generate 시도가 이 실행을 대체했습니다.");
+  error.code = "GENERATION_SUPERSEDED";
+  return error;
+}
+
+function writeOwnedOrThrow(statePath, attemptId, patch) {
+  if (!writeGenerationStateIfOwned(statePath, attemptId, patch)) {
+    throw generationSupersededError();
+  }
+}
+
+async function runGenerateV2(config, meetingDate) {
+  const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
+  const reportPath = buildOutputPath(meetingDate, config);
+  const generationStatePath = buildGenerationStatePath(reportPath);
+  const meetingDateText = formatDate(meetingDate);
+  const attemptId = crypto.randomUUID();
+  const runPaths = buildRunPaths(config.env.outputDir, meetingDateText, attemptId);
+  const startedAt = new Date().toISOString();
+  const generationStateBase = {
+    schemaVersion: 2,
+    meetingDate: meetingDateText,
+    reportDepth: Number(config.env.reportDepth),
+    snapshotHash: snapshot.contentHash,
+    attemptId,
+    runDir: runPaths.runDir,
+    startedAt,
+  };
+  let runInitialized = false;
+
+  withGenerationStateLock(generationStatePath, () => {
+    writeJsonAtomic(generationStatePath, { ...generationStateBase, status: "running" });
+  });
+
+  try {
+    initializeReportRun(runPaths, { ...generationStateBase, status: "running" });
+    runInitialized = true;
+    writeCandidates(snapshot, snapshotPath, meetingDate, config);
+
+    const catalog = buildFactCatalog(snapshot.rawContent, [{
+      type: "meeting_date",
+      raw: meetingDateText,
+      subject: "meeting date",
+    }]);
+    writeImmutableArtifact(
+      runPaths.catalogPath,
+      JSON.stringify(catalog, null, 2) + "\n"
+    );
+    updateRunState(runPaths, attemptId, { catalogHash: catalog.catalogHash });
+    writeOwnedOrThrow(generationStatePath, attemptId, { catalogHash: catalog.catalogHash });
+
+    const prompt = buildAiPrompt(snapshot.rawContent, config, meetingDate, { factCatalog: catalog });
+    writeImmutableArtifact(
+      runPaths.promptInputPath,
+      JSON.stringify({
+        snapshotPath,
+        snapshotHash: snapshot.contentHash,
+        catalogHash: catalog.catalogHash,
+        promptHash: sha256(prompt),
+        model: config.env.aiModel,
+        effort: config.env.aiEffort,
+        promptLength: prompt.length,
+        timeoutMs: config.env.aiTimeoutMs,
+      }, null, 2) + "\n"
+    );
+
+    const generated = await generateContent(config, meetingDate, snapshot.rawContent, {
+      factCatalog: catalog,
+      prompt,
+    });
+    writeImmutableArtifact(runPaths.aiDraftPath, generated.rawAiOutput);
+    writeImmutableArtifact(runPaths.workingDraftPath, generated.content);
+    updateRunState(runPaths, attemptId, {
+      status: "ai_complete",
+      sanitizer: {
+        inputHash: sha256(generated.rawAiOutput),
+        outputHash: sha256(generated.content),
+      },
+      aiCompletedAt: new Date().toISOString(),
+    });
+
+    const result = validateAnnotatedReport(
+      snapshot.rawContent,
+      generated.content,
+      catalog,
+      {
+        attemptId,
+        meetingDate: meetingDateText,
+        reportDepth: Number(config.env.reportDepth),
+        snapshotHash: snapshot.contentHash,
+        snapshotPath,
+        sectionHeader: config.env.sectionHeader,
+        repos: config.repos,
+        openIssueVerifierOptions: config.openIssueVerifierOptions,
+      }
+    );
+    if (result.validation.status === "PASS") {
+      result.validation.cleanReportHash = sha256(result.cleanContent);
+    }
+    const revision = appendValidationRevision(runPaths, attemptId, result.validation);
+    const latestValidationPath = path.basename(revision.validationPath);
+
+    if (result.validation.status !== "PASS") {
+      updateRunState(runPaths, attemptId, { status: "validation_failed" });
+      writeOwnedOrThrow(generationStatePath, attemptId, {
+        status: "failed",
+        failedAt: new Date().toISOString(),
+        validationStatus: result.validation.status,
+        latestValidationPath,
+      });
+      return {
+        snapshot,
+        snapshotPath,
+        reportPath,
+        generationStatePath,
+        runPaths,
+        validation: result.validation,
+      };
+    }
+
+    promoteRunReport({
+      paths: runPaths,
+      reportPath,
+      generationStatePath,
+      cleanContent: result.cleanContent,
+      validation: result.validation,
+      generationState: {
+        ...generationStateBase,
+        status: "complete",
+        completedAt: new Date().toISOString(),
+        catalogHash: catalog.catalogHash,
+        validationStatus: result.validation.status,
+        latestValidationPath,
+        cleanReportHash: result.validation.cleanReportHash,
+      },
+    });
+    return {
+      snapshot,
+      snapshotPath,
+      reportPath,
+      generationStatePath,
+      runPaths,
+      validation: result.validation,
+    };
+  } catch (error) {
+    if (runInitialized && error && /^AI_/.test(error.code || "")) {
+      try {
+        updateRunState(runPaths, attemptId, {
+          status: "ai_failed",
+          failedAt: new Date().toISOString(),
+          errorCode: error.code,
+        });
+      } catch (stateError) {
+        if (!/transition|attempt/i.test(stateError.message)) throw stateError;
+      }
+    }
+    writeGenerationStateIfOwned(generationStatePath, attemptId, {
+      status: "failed",
+      failedAt: new Date().toISOString(),
+      errorCode: error && error.code ? error.code : "GENERATE_FAILED",
+    });
+    throw error;
+  }
+}
+
+async function runGenerate(config, meetingDate) {
+  return config.env.aiSummarize
+    ? runGenerateV2(config, meetingDate)
+    : runGenerateV1(config, meetingDate);
 }
 
 function assertGenerationComplete(
@@ -362,6 +547,7 @@ module.exports = {
   resolveRunMeetingDate,
   runCollect,
   runGenerate,
+  runGenerateV2,
   runUpdate,
   validateDraft,
   writeCandidates,
