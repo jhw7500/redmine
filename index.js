@@ -16,6 +16,10 @@ const {
 } = require("./lib/report-artifact");
 const { collectSnapshot, loadSnapshot } = require("./lib/report-snapshot");
 const {
+  blockingWarnings,
+  isPublishable,
+} = require("./lib/report-publishability");
+const {
   appendValidationRevision,
   buildRunPaths,
   initializeReportRun,
@@ -91,33 +95,6 @@ function validateDraft(snapshot, snapshotPath, reportPath, meetingDate, config, 
     console.warn(`[validation] ${issue.severity} ${issue.code}: ${issue.message}`);
   }
   return { validation, validationPath };
-}
-
-// 게시를 막지 않는 warning은 여기 등록된 것뿐이다. open_status_pickaxe_unavailable은
-// 코드 심볼이 없는 문장이라 pickaxe 자동 확인이 불가능할 뿐이며, 문구 수정으로 없앨 수
-// 없어 게시를 영구 차단했다. 반면 해결 흔적 발견(open_status_resolution_evidence)이나
-// git 확인 실패는 AGENTS.md의 stale "미해결" 방지 규율상 사람이 봐야 하므로 계속 막는다.
-// 기본값이 "차단"이므로 새 warning 코드가 생겨도 조용히 통과하지 않는다.
-//
-// [결정 · 2026-07-29] PR #9 리뷰에서 이 항목도 차단해야 한다는 지적이 있었다 —
-// pickaxe가 불가능한 경우가 곧 fix를 놓치기 쉬운 경우라는 근거다. 그럼에도 비차단으로
-// 두기로 했다: title check는 계속 수행되고, 해결 흔적이 실제로 발견되면
-// open_status_resolution_evidence로 여전히 막히며, 차단을 유지하면 문구로 제거할 수
-// 없는 이 경고 하나 때문에 주간 게시가 영구 중단된다(2026-07-22·07-29 실제 누락).
-// 대신 ALERT 알림과 경고 코드 로깅을 함께 넣어 경고를 놓치지 않게 했다.
-const NON_BLOCKING_WARNING_CODES = new Set(["open_status_pickaxe_unavailable"]);
-
-function blockingWarnings(validation) {
-  return (validation.issues || []).filter(
-    (issue) => issue.severity === "warning" && !NON_BLOCKING_WARNING_CODES.has(issue.code)
-  );
-}
-
-// generate와 update가 같은 기준을 쓰도록 게시 가능 판정을 한 곳에 모은다.
-function isPublishable(validation) {
-  if (validation.status === "PASS") return true;
-  if (validation.status !== "WARNING") return false;
-  return blockingWarnings(validation).length === 0;
 }
 
 function assertPublishable(validation, config) {
