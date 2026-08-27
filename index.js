@@ -904,15 +904,28 @@ async function runUpdate(config, meetingDate) {
   if (generation.state.schemaVersion !== 2) assertPublishable(validation, config);
   writeCandidates(snapshot, snapshotPath, meetingDate, config);
 
-  const assertReady = () => generation.state.schemaVersion === 2
-    ? validateV2Ready().evidence
-    : assertGenerationComplete(
+  const validateV1Ready = () => {
+    const evidence = assertGenerationComplete(
       reportPath,
       snapshot,
       meetingDate,
       config,
       generation.state.attemptId
     );
+    const fresh = validateDraft(
+      snapshot,
+      snapshotPath,
+      reportPath,
+      meetingDate,
+      config,
+      { reportContent }
+    );
+    assertPublishable(fresh.validation, config);
+    return evidence;
+  };
+  const assertReady = () => generation.state.schemaVersion === 2
+    ? validateV2Ready().evidence
+    : validateV1Ready();
 
   // 발표노트 자동 등록은 프로젝트 정책상 운영 프로필인 depth3 update에서만 수행한다.
   const candidates = Number(config.env.reportDepth) === 3
