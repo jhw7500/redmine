@@ -22,13 +22,14 @@ Optional env vars
 - `INCLUDE_MERGES` (set to 1 to include merge commits)
 - `OUTPUT_DIR` (default: /home/jhw/ai/codex/redmine-auto/out)
 - `OUTPUT_PATH` (default: OUTPUT_DIR/jo-hyunwoo-YYYY-MM-DD.depthN.md; 명시하면 해당 경로를 그대로 사용)
-- `MODE` (`collect`=수집 snapshot 생성, `generate`=snapshot에서 depth 파일 생성, `update`=검증된 파일을 Redmine에 반영)
+- `MODE` (`collect`=수집 snapshot 생성, `generate`=snapshot에서 depth 파일 생성, `revalidate`=실패한 AI run 재검증, `update`=검증된 파일을 Redmine에 반영)
+- `RUN_ID` (`MODE=revalidate`에서 필수인 schema v2 run UUID)
 - `REPORT_DEPTH` (default: 2 — 보고서 상세도. 1=요약, 2=표준, 3=중간, 4=상세. repo-config.json `defaults.reportDepth`/`depthProfiles` 참조)
 - `SNAPSHOT_PATH` (default: `OUTPUT_DIR/report-YYYY-MM-DD.snapshot.json`)
 - `FORCE_COLLECT` (`1`이면 sealed snapshot을 재수집. 원본이 바뀌면 기존 snapshot을 hash 이름으로 보존)
 - `ALLOW_PARTIAL_SNAPSHOT` (`1`이면 일부 source 수집 실패 snapshot도 generate/update에 사용)
 - `VALIDATION_MODE` (`block` 기본, `warn`이면 사실 검증 실패를 경고하고 update 계속)
-- `VALIDATION_OVERRIDE` (`1`이면 검증 실패를 명시적으로 수동 우회)
+- `VALIDATION_OVERRIDE` (`1`이면 schema v1 검증 실패를 명시적으로 수동 우회. schema v2의 사실·hash 오류는 우회 불가)
 - `PRESENTATION_NOTE_MODE` (`tagged` 기본. `suggest`=자동 후보 기록+명시 태그만 게시, `auto`=자동 후보도 게시, `off`=비활성)
 - `PRESENTATION_NOTE_THRESHOLD` (자동 발표노트 후보 점수, 기본 5)
 - `LEADER_HIGHLIGHT` (default: 0 — 팀장 회의 보고용 중요 항목 밑줄(`<u>`) 강조. 1=사용. repo-config.json `reportFilter.leaderHighlight.enabled`보다 우선)
@@ -62,18 +63,26 @@ Notes
 Run
 - Collect once: `MODE=collect MEETING_DATE=2026-07-15 ./run-report-env.sh`
 - Draft only: `MODE=generate REPORT_DEPTH=3 MEETING_DATE=2026-07-15 ./run-report-env.sh`
+- Revalidate a failed AI run without Claude: `MODE=revalidate RUN_ID=<uuid> MEETING_DATE=2026-07-15 ./run-report-env.sh`
 - Update from validated file: `MODE=update REPORT_DEPTH=3 MEETING_DATE=2026-07-15 ./run-report-env.sh`
 - Depth 비교 테스트: 먼저 `MODE=collect ./run-report-env.sh` 실행 후 `./run-depth-test.sh` — 동일 sealed snapshot으로 depth 1/2/3/4 생성·검증
 
 Mode boundaries
 - `collect`: Git/Notion/session을 조회하고 sealed snapshot만 저장. AI/Redmine 쓰기 없음.
-- `generate`: 기존 sealed snapshot만 읽음. 수집하지 않고 AI 요약·사실 검증 후 depth 파일 저장.
+- `generate`: 기존 sealed snapshot만 읽음. 수집하지 않고 AI 요약·사실 검증 후 depth 파일 저장. `AI_SUMMARIZE=1`이면 schema v2, `AI_SUMMARIZE=0`이면 기존 schema v1.
+- `revalidate`: 지정한 실패 schema v2 run의 working draft를 Claude 호출 없이 재검증. Redmine 쓰기 없음.
 - `update`: 수집/AI 호출 없음. snapshot과 depth 파일을 재검증한 후 Redmine 반영.
 
 AI 요약은 호출당 1회로 고정하며 `--safe-mode --tools "" --no-session-persistence`로 실행한다.
 따라서 프로젝트 plugin·hook·MCP와 사용자 전역 모델/effort를 불러오지 않는다. AI가 활성화된
 상태에서 입력 상한, quota, timeout, CLI 실행 또는 빈 응답 오류가 발생하면 `generate`를 실패시키고
 raw 초안으로 대체하지 않는다. `update`는 기존처럼 별도 실행이지만 실패한 generate 뒤에는 게시 단계로 진행하지 않는다.
+AI-enabled schema v2 generate는 시도별 자료를 `out/runs/<date>/<run-id>/`에 저장한다.
+`draft.ai.annotated.md`는 Claude 원본이므로 수정하지 않고, 복구할 때는 `draft.working.annotated.md`만 수정한다.
+`MODE=revalidate`는 같은 run에 `validation.NNN.json` revision을 새로 추가하며 Claude를 호출하지 않는다.
+검증 성공 시 marker가 제거된 `report.clean.md`만 canonical depth 보고서로 원자적으로 승격된다.
+schema v2 clean 보고서를 직접 편집하면 update가 Redmine 요청 전에 hash 불일치로 중단하며,
+사실 marker·snapshot·catalog·validation·clean-report hash 오류는 `VALIDATION_OVERRIDE=1`로도 우회할 수 없다.
 각 generate 시도는 `.generation.json`을 먼저 `running`으로 기록하고 모든 생성·검증이 끝나야
 `complete`로 바꾼다. `update`는 동일 meeting date·depth·snapshot hash의 `complete` 증거가 없으면
 Redmine API 호출 전에 중단하므로, 같은 날짜의 이전 초안이 남아 있어도 실패한 시도 뒤에 게시하지 않는다.
@@ -87,6 +96,13 @@ Artifacts
 - `out/jo-hyunwoo-YYYY-MM-DD.depthN.generation.json`: generate 시도 상태와 snapshot 결속 정보
 - `out/jo-hyunwoo-YYYY-MM-DD.depthN.validation.json`: snapshot/report hash와 사실검증 결과
 - `out/jo-hyunwoo-YYYY-MM-DD.depthN.published.md`: Redmine에 실제 반영한 최종 조현우 섹션
+- `out/runs/YYYY-MM-DD/<run-id>/state.json`: schema v2 시도 상태와 최신 validation revision 소유권
+- `out/runs/YYYY-MM-DD/<run-id>/fact-catalog.json`: 원본에서 추출한 exact-copy 사실 catalog
+- `out/runs/YYYY-MM-DD/<run-id>/prompt-input.json`: snapshot/catalog/prompt/model 입력 증거
+- `out/runs/YYYY-MM-DD/<run-id>/draft.ai.annotated.md`: 변경 금지 Claude 원본 출력
+- `out/runs/YYYY-MM-DD/<run-id>/draft.working.annotated.md`: 실패 run 복구 시 수정할 annotated working draft
+- `out/runs/YYYY-MM-DD/<run-id>/validation.NNN.json`: 덮어쓰지 않고 추가되는 검증 revision
+- `out/runs/YYYY-MM-DD/<run-id>/report.clean.md`: marker가 제거된 검증 성공 보고서
 
 Current cron flow (Wednesday, Asia/Seoul)
 - 06:05 `collect`
