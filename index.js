@@ -33,6 +33,7 @@ const {
   promoteRunReport,
   updateRunState,
   withGenerationStateLock,
+  withRunValidationLock,
   writeImmutableArtifact,
 } = require("./lib/report-run");
 const {
@@ -382,19 +383,50 @@ async function runGenerateV2(config, meetingDate) {
     if (result.validation.publishable) {
       result.validation.cleanReportHash = sha256(result.cleanContent);
     }
-    const revision = appendValidationRevision(runPaths, attemptId, result.validation);
-    result.validation = revision.validation;
-    const latestValidationPath = path.basename(revision.validationPath);
+    return withRunValidationLock(runPaths, () => {
+      const revision = appendValidationRevision(runPaths, attemptId, result.validation);
+      result.validation = revision.validation;
+      const latestValidationPath = path.basename(revision.validationPath);
 
-    if (!result.validation.publishable) {
-      updateRunState(runPaths, attemptId, { status: "validation_failed" });
-      writeOwnedOrThrow(generationStatePath, attemptId, {
-        status: "failed",
-        failedAt: new Date().toISOString(),
-        validationStatus: result.validation.status,
-        latestValidationPath,
-        latestValidationHash: revision.validationHash,
-        validationRevision: revision.revision,
+      if (!result.validation.publishable) {
+        updateRunState(runPaths, attemptId, { status: "validation_failed" });
+        writeOwnedOrThrow(generationStatePath, attemptId, {
+          status: "failed",
+          failedAt: new Date().toISOString(),
+          validationStatus: result.validation.status,
+          latestValidationPath,
+          latestValidationHash: revision.validationHash,
+          validationRevision: revision.revision,
+        });
+        return {
+          snapshot,
+          snapshotPath,
+          reportPath,
+          generationStatePath,
+          runPaths,
+          validation: result.validation,
+        };
+      }
+
+      promoteRunReport({
+        paths: runPaths,
+        reportPath,
+        generationStatePath,
+        cleanContent: result.cleanContent,
+        validation: result.validation,
+        generationState: {
+          ...generationStateBase,
+          status: "complete",
+          completedAt: new Date().toISOString(),
+          catalogHash: catalog.catalogHash,
+          validationStatus: result.validation.status,
+          latestValidationPath,
+          latestValidationHash: revision.validationHash,
+          validationRevision: revision.revision,
+          cleanReportHash: result.validation.cleanReportHash,
+          promptInputHash,
+          rawAiDraftHash,
+        },
       });
       return {
         snapshot,
@@ -404,36 +436,7 @@ async function runGenerateV2(config, meetingDate) {
         runPaths,
         validation: result.validation,
       };
-    }
-
-    promoteRunReport({
-      paths: runPaths,
-      reportPath,
-      generationStatePath,
-      cleanContent: result.cleanContent,
-      validation: result.validation,
-      generationState: {
-        ...generationStateBase,
-        status: "complete",
-        completedAt: new Date().toISOString(),
-        catalogHash: catalog.catalogHash,
-        validationStatus: result.validation.status,
-        latestValidationPath,
-        latestValidationHash: revision.validationHash,
-        validationRevision: revision.revision,
-        cleanReportHash: result.validation.cleanReportHash,
-        promptInputHash,
-        rawAiDraftHash,
-      },
     });
-    return {
-      snapshot,
-      snapshotPath,
-      reportPath,
-      generationStatePath,
-      runPaths,
-      validation: result.validation,
-    };
   } catch (error) {
     if (runInitialized && aiComplete) {
       markRecoverableRunFailure(runPaths, generationStatePath, attemptId, error);
@@ -495,40 +498,42 @@ async function runRevalidate(config, meetingDate) {
   if (publishable) {
     result.validation.cleanReportHash = sha256(result.cleanContent);
   }
-  const revision = appendValidationRevision(
-    run.paths,
-    run.state.attemptId,
-    result.validation
-  );
-  result.validation = revision.validation;
-  const latestValidationPath = path.basename(revision.validationPath);
+  return withRunValidationLock(run.paths, () => {
+    const revision = appendValidationRevision(
+      run.paths,
+      run.state.attemptId,
+      result.validation
+    );
+    result.validation = revision.validation;
+    const latestValidationPath = path.basename(revision.validationPath);
 
-  if (!publishable) {
-    updateRunState(run.paths, run.state.attemptId, { status: "validation_failed" });
-    writeOwnedOrThrow(generationStatePath, run.state.attemptId, {
-      status: "failed",
-      validationStatus: result.validation.status,
-      latestValidationPath,
-      latestValidationHash: revision.validationHash,
-      validationRevision: revision.revision,
+    if (!publishable) {
+      updateRunState(run.paths, run.state.attemptId, { status: "validation_failed" });
+      writeOwnedOrThrow(generationStatePath, run.state.attemptId, {
+        status: "failed",
+        validationStatus: result.validation.status,
+        latestValidationPath,
+        latestValidationHash: revision.validationHash,
+        validationRevision: revision.revision,
+      });
+      return { ...result, runPaths: run.paths, reportPath };
+    }
+
+    promoteRunReport({
+      paths: run.paths,
+      reportPath,
+      generationStatePath,
+      cleanContent: result.cleanContent,
+      validation: result.validation,
+      generationState: {
+        ...revision.state,
+        status: "complete",
+        cleanReportHash: result.validation.cleanReportHash,
+        latestValidationPath,
+      },
     });
     return { ...result, runPaths: run.paths, reportPath };
-  }
-
-  promoteRunReport({
-    paths: run.paths,
-    reportPath,
-    generationStatePath,
-    cleanContent: result.cleanContent,
-    validation: result.validation,
-    generationState: {
-      ...revision.state,
-      status: "complete",
-      cleanReportHash: result.validation.cleanReportHash,
-      latestValidationPath,
-    },
   });
-  return { ...result, runPaths: run.paths, reportPath };
 }
 
 function assertGenerationComplete(
