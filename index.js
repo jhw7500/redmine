@@ -30,7 +30,9 @@ const {
   buildRunPaths,
   initializeReportRun,
   loadReportRun,
+  loadResolvedReportRun,
   promoteRunReport,
+  resolveReportRunPaths,
   updateRunState,
   withGenerationStateLock,
   withRunValidationLock,
@@ -468,37 +470,42 @@ async function runGenerate(config, meetingDate) {
 
 async function runRevalidate(config, meetingDate) {
   const meetingDateText = formatDate(meetingDate);
-  const run = loadReportRun(config.env.outputDir, meetingDateText, config.env.runId);
-  const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
+  const runPaths = resolveReportRunPaths(
+    config.env.outputDir,
+    meetingDateText,
+    config.env.runId
+  );
   const reportPath = buildOutputPath(meetingDate, config);
   const generationStatePath = buildGenerationStatePath(reportPath);
 
-  assertGenerationStateOwned(generationStatePath, run.state.attemptId);
-  assertRunInputs(run.state, snapshot, run.catalog, {
-    attemptId: config.env.runId,
-    meetingDate: meetingDateText,
-    reportDepth: Number(config.env.reportDepth),
-  });
-  if (run.state.status !== "validation_failed") {
-    throw new Error(`revalidate requires validation_failed state, got ${run.state.status}`);
-  }
+  return withRunValidationLock(runPaths, () => {
+    const run = loadResolvedReportRun(runPaths, config.env.runId);
+    const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
+    assertGenerationStateOwned(generationStatePath, run.state.attemptId);
+    assertRunInputs(run.state, snapshot, run.catalog, {
+      attemptId: config.env.runId,
+      meetingDate: meetingDateText,
+      reportDepth: Number(config.env.reportDepth),
+    });
+    if (run.state.status !== "validation_failed") {
+      throw new Error(`revalidate requires validation_failed state, got ${run.state.status}`);
+    }
 
-  const annotated = fs.readFileSync(run.paths.workingDraftPath, "utf8");
-  const result = validateAnnotatedReport(snapshot.rawContent, annotated, run.catalog, {
-    attemptId: run.state.attemptId,
-    meetingDate: meetingDateText,
-    reportDepth: Number(config.env.reportDepth),
-    snapshotHash: snapshot.contentHash,
-    snapshotPath,
-    sectionHeader: config.env.sectionHeader,
-    repos: config.repos,
-    openIssueVerifierOptions: config.openIssueVerifierOptions,
-  });
-  const publishable = isPublishable(result.validation);
-  if (publishable) {
-    result.validation.cleanReportHash = sha256(result.cleanContent);
-  }
-  return withRunValidationLock(run.paths, () => {
+    const annotated = fs.readFileSync(run.paths.workingDraftPath, "utf8");
+    const result = validateAnnotatedReport(snapshot.rawContent, annotated, run.catalog, {
+      attemptId: run.state.attemptId,
+      meetingDate: meetingDateText,
+      reportDepth: Number(config.env.reportDepth),
+      snapshotHash: snapshot.contentHash,
+      snapshotPath,
+      sectionHeader: config.env.sectionHeader,
+      repos: config.repos,
+      openIssueVerifierOptions: config.openIssueVerifierOptions,
+    });
+    const publishable = isPublishable(result.validation);
+    if (publishable) {
+      result.validation.cleanReportHash = sha256(result.cleanContent);
+    }
     const revision = appendValidationRevision(
       run.paths,
       run.state.attemptId,
