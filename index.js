@@ -117,6 +117,8 @@ const NON_OVERRIDABLE_V2_CODES = new Set([
   "validation_path_mismatch",
   "attempt_ownership_mismatch",
   "run_path_mismatch",
+  "prompt_input_hash_mismatch",
+  "raw_ai_draft_hash_mismatch",
 ]);
 
 function hasNonOverridableV2Issue(validation) {
@@ -260,6 +262,25 @@ function writeOwnedOrThrow(statePath, attemptId, patch) {
   }
 }
 
+function markRecoverableRunFailure(runPaths, generationStatePath, attemptId, error) {
+  const failedAt = new Date().toISOString();
+  const errorCode = error && error.code ? error.code : "GENERATE_FAILED";
+  try {
+    updateRunState(runPaths, attemptId, {
+      status: "validation_failed",
+      failedAt,
+      errorCode,
+    });
+  } catch (stateError) {
+    error.recoveryStateError = stateError;
+  }
+  writeGenerationStateIfOwned(generationStatePath, attemptId, {
+    status: "failed",
+    failedAt,
+    errorCode,
+  });
+}
+
 async function runGenerateV2(config, meetingDate) {
   const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
   const reportPath = buildOutputPath(meetingDate, config);
@@ -280,6 +301,8 @@ async function runGenerateV2(config, meetingDate) {
   let runInitialized = false;
   let aiStarted = false;
   let aiComplete = false;
+  let promptInputHash = null;
+  let rawAiDraftHash = null;
 
   withGenerationStateLock(generationStatePath, () => {
     writeJsonAtomic(generationStatePath, { ...generationStateBase, status: "running" });
@@ -303,19 +326,20 @@ async function runGenerateV2(config, meetingDate) {
     writeOwnedOrThrow(generationStatePath, attemptId, { catalogHash: catalog.catalogHash });
 
     const prompt = buildAiPrompt(snapshot.rawContent, config, meetingDate, { factCatalog: catalog });
-    writeImmutableArtifact(
-      runPaths.promptInputPath,
-      JSON.stringify({
-        snapshotPath,
-        snapshotHash: snapshot.contentHash,
-        catalogHash: catalog.catalogHash,
-        promptHash: sha256(prompt),
-        model: config.env.aiModel,
-        effort: config.env.aiEffort,
-        promptLength: prompt.length,
-        timeoutMs: config.env.aiTimeoutMs,
-      }, null, 2) + "\n"
-    );
+    const serializedPromptInput = JSON.stringify({
+      snapshotPath,
+      snapshotHash: snapshot.contentHash,
+      catalogHash: catalog.catalogHash,
+      promptHash: sha256(prompt),
+      model: config.env.aiModel,
+      effort: config.env.aiEffort,
+      promptLength: prompt.length,
+      timeoutMs: config.env.aiTimeoutMs,
+    }, null, 2) + "\n";
+    promptInputHash = sha256(serializedPromptInput);
+    writeImmutableArtifact(runPaths.promptInputPath, serializedPromptInput);
+    updateRunState(runPaths, attemptId, { promptInputHash });
+    writeOwnedOrThrow(generationStatePath, attemptId, { promptInputHash });
 
     aiStarted = true;
     const generated = await generateContent(config, meetingDate, snapshot.rawContent, {
@@ -323,6 +347,9 @@ async function runGenerateV2(config, meetingDate) {
       prompt,
       onRawAiOutput: (rawAiOutput) => {
         writeImmutableArtifact(runPaths.aiDraftPath, rawAiOutput);
+        rawAiDraftHash = sha256(rawAiOutput);
+        updateRunState(runPaths, attemptId, { rawAiDraftHash });
+        writeOwnedOrThrow(generationStatePath, attemptId, { rawAiDraftHash });
       },
     });
     writeImmutableArtifact(runPaths.workingDraftPath, generated.content);
@@ -395,6 +422,8 @@ async function runGenerateV2(config, meetingDate) {
         latestValidationHash: revision.validationHash,
         validationRevision: revision.revision,
         cleanReportHash: result.validation.cleanReportHash,
+        promptInputHash,
+        rawAiDraftHash,
       },
     });
     return {
@@ -406,7 +435,9 @@ async function runGenerateV2(config, meetingDate) {
       validation: result.validation,
     };
   } catch (error) {
-    if (runInitialized && aiStarted && !aiComplete) {
+    if (runInitialized && aiComplete) {
+      markRecoverableRunFailure(runPaths, generationStatePath, attemptId, error);
+    } else if (runInitialized && aiStarted) {
       try {
         updateRunState(runPaths, attemptId, {
           status: "ai_failed",
@@ -529,6 +560,8 @@ function assertGenerationComplete(
       "latestValidationHash",
       "validationRevision",
       "cleanReportHash",
+      "promptInputHash",
+      "rawAiDraftHash",
     ];
     const hasV2Ownership = v2OwnershipFields.some((field) => Object.hasOwn(state, field));
     let matchingV2RunExists = false;
@@ -637,6 +670,41 @@ function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, 
   }
   if (current.catalogHash !== run.state.catalogHash) {
     throw evidenceError("catalog_hash_mismatch", "catalog hash mismatch");
+  }
+  const pinnedArtifacts = [
+    {
+      code: "prompt_input_hash_mismatch",
+      label: "prompt input",
+      filePath: run.paths.promptInputPath,
+      globalHash: current.promptInputHash,
+      runHash: run.state.promptInputHash,
+    },
+    {
+      code: "raw_ai_draft_hash_mismatch",
+      label: "raw AI draft",
+      filePath: run.paths.aiDraftPath,
+      globalHash: current.rawAiDraftHash,
+      runHash: run.state.rawAiDraftHash,
+    },
+  ];
+  for (const artifact of pinnedArtifacts) {
+    let content;
+    try {
+      content = fs.readFileSync(artifact.filePath, "utf8");
+    } catch (error) {
+      throw evidenceError(
+        artifact.code,
+        `${artifact.label} artifact is missing or unreadable`,
+        error
+      );
+    }
+    if (
+      !artifact.globalHash
+      || artifact.globalHash !== artifact.runHash
+      || sha256(content) !== artifact.runHash
+    ) {
+      throw evidenceError(artifact.code, `${artifact.label} artifact hash mismatch`);
+    }
   }
 
   const latestValidationPath = current.latestValidationPath;
@@ -778,9 +846,7 @@ async function runUpdate(config, meetingDate) {
   const generation = assertGenerationComplete(reportPath, snapshot, meetingDate, config);
   const reportContent = fs.readFileSync(reportPath, "utf8");
 
-  let validation;
-  let validationPath;
-  if (generation.state.schemaVersion === 2) {
+  const validateV2Ready = () => {
     const evidence = assertV2PublishEvidence({
       state: generation.state,
       reportContent,
@@ -796,7 +862,17 @@ async function runUpdate(config, meetingDate) {
       repos: config.repos,
       openIssueVerifierOptions: config.openIssueVerifierOptions,
     });
-    validation = buildPublishTimeValidation(evidence.validation, publishTime);
+    const freshValidation = buildPublishTimeValidation(evidence.validation, publishTime);
+    assertPublishable(freshValidation, config);
+    return { evidence, validation: freshValidation };
+  };
+
+  let validation;
+  let validationPath;
+  if (generation.state.schemaVersion === 2) {
+    const ready = validateV2Ready();
+    const { evidence } = ready;
+    validation = ready.validation;
     validationPath = path.join(
       evidence.run.paths.runDir,
       generation.state.latestValidationPath
@@ -813,17 +889,11 @@ async function runUpdate(config, meetingDate) {
     validation = legacy.validation;
     validationPath = legacy.validationPath;
   }
-  assertPublishable(validation, config);
+  if (generation.state.schemaVersion !== 2) assertPublishable(validation, config);
   writeCandidates(snapshot, snapshotPath, meetingDate, config);
 
   const assertReady = () => generation.state.schemaVersion === 2
-    ? assertV2PublishEvidence({
-      state: generation.state,
-      reportContent,
-      snapshot,
-      meetingDate,
-      config,
-    })
+    ? validateV2Ready().evidence
     : assertGenerationComplete(
       reportPath,
       snapshot,
