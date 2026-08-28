@@ -46,6 +46,7 @@ const {
   buildOutputPath,
   buildWikiUrl,
   buildAiPrompt,
+  appendNotesBlock,
   extractTitleFromUrl,
   formatDate,
   generate,
@@ -55,6 +56,7 @@ const {
   targetWednesday,
   update,
 } = require("./lib/publisher");
+const { stripAstralChars } = require("./lib/text-normalization");
 
 function resolveRunMeetingDate(config, now = new Date()) {
   let meetingDate = resolveMeetingDate(config);
@@ -833,6 +835,12 @@ function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, 
   ) {
     throw evidenceError("clean_report_hash_mismatch", "clean report hash mismatch");
   }
+  if (stripAstralChars(reportContent) !== reportContent) {
+    throw evidenceError(
+      "clean_report_hash_mismatch",
+      "clean report is not normalized for Redmine; regenerate it"
+    );
+  }
 
   return { validation, run };
 }
@@ -874,7 +882,7 @@ async function runUpdate(config, meetingDate) {
   const generation = assertGenerationComplete(reportPath, snapshot, meetingDate, config);
   const reportContent = fs.readFileSync(reportPath, "utf8");
 
-  const validateV2Ready = () => {
+  const validateV2Ready = (publishContent = reportContent) => {
     const evidence = assertV2PublishEvidence({
       state: generation.state,
       reportContent,
@@ -882,7 +890,7 @@ async function runUpdate(config, meetingDate) {
       meetingDate,
       config,
     });
-    const publishTime = validateNonFactRules(reportContent, {
+    const publishTime = validateNonFactRules(publishContent, {
       meetingDate: formatDate(meetingDate),
       reportDepth: Number(config.env.reportDepth),
       snapshotHash: snapshot.contentHash,
@@ -920,7 +928,7 @@ async function runUpdate(config, meetingDate) {
   if (generation.state.schemaVersion !== 2) assertPublishable(validation, config);
   writeCandidates(snapshot, snapshotPath, meetingDate, config);
 
-  const validateV1Ready = () => {
+  const validateV1Ready = (publishContent = reportContent) => {
     const evidence = assertGenerationComplete(
       reportPath,
       snapshot,
@@ -934,14 +942,14 @@ async function runUpdate(config, meetingDate) {
       reportPath,
       meetingDate,
       config,
-      { reportContent }
+      { reportContent: publishContent }
     );
     assertPublishable(fresh.validation, config);
     return evidence;
   };
-  const assertReady = () => generation.state.schemaVersion === 2
-    ? validateV2Ready().evidence
-    : validateV1Ready();
+  const assertReady = (publishContent) => generation.state.schemaVersion === 2
+    ? validateV2Ready(publishContent).evidence
+    : validateV1Ready(publishContent);
 
   // 발표노트 자동 등록은 프로젝트 정책상 운영 프로필인 depth3 update에서만 수행한다.
   const candidates = Number(config.env.reportDepth) === 3
@@ -952,6 +960,11 @@ async function runUpdate(config, meetingDate) {
     : [];
   const loadNoteRefs = candidates.length
     ? async () => {
+      const previewRefs = candidates.map((candidate, index) => ({
+        id: `pending-${index + 1}`,
+        title: stripAstralChars(String(candidate.title || "")),
+      }));
+      await assertReady(appendNotesBlock(reportContent, previewRefs));
       if (!process.env.NOTION_API_KEY) {
         throw new Error("발표노트 Issue 생성에 NOTION_API_KEY가 필요합니다.");
       }
