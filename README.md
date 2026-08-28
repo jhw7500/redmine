@@ -22,8 +22,10 @@ Optional env vars
 - `INCLUDE_MERGES` (set to 1 to include merge commits)
 - `OUTPUT_DIR` (default: /home/jhw/ai/codex/redmine-auto/out)
 - `OUTPUT_PATH` (default: OUTPUT_DIR/jo-hyunwoo-YYYY-MM-DD.depthN.md; 명시하면 해당 경로를 그대로 사용)
-- `MODE` (`collect`=수집 snapshot 생성, `generate`=snapshot에서 depth 파일 생성, `revalidate`=실패한 AI run 재검증, `update`=검증된 파일을 Redmine에 반영)
+- `MODE` (`collect`=수집 snapshot 생성, `generate`=snapshot에서 depth 파일 생성, `revalidate`=실패한 AI run 재검증, `update`=검증된 파일을 Redmine에 반영, `prune`=오래된 schema v2 run 정리)
 - `RUN_ID` (`MODE=revalidate`에서 필수인 schema v2 run UUID)
+- `RUN_ARTIFACT_RETENTION_DAYS` (default: `90`; 이 기간이 지난 terminal run만 정리 대상)
+- `PRUNE_APPLY` (`MODE=prune`에서 `1`이면 실제 삭제, 미설정 시 dry-run)
 - `REPORT_DEPTH` (default: 2 — 보고서 상세도. 1=요약, 2=표준, 3=중간, 4=상세. repo-config.json `defaults.reportDepth`/`depthProfiles` 참조)
 - `SNAPSHOT_PATH` (default: `OUTPUT_DIR/report-YYYY-MM-DD.snapshot.json`)
 - `FORCE_COLLECT` (`1`이면 sealed snapshot을 재수집. 원본이 바뀌면 기존 snapshot을 hash 이름으로 보존)
@@ -65,6 +67,8 @@ Run
 - Draft only: `MODE=generate REPORT_DEPTH=3 MEETING_DATE=2026-07-15 ./run-report-env.sh`
 - Revalidate a failed AI run without Claude: `MODE=revalidate RUN_ID=<uuid> MEETING_DATE=2026-07-15 ./run-report-env.sh`
 - Update from validated file: `MODE=update REPORT_DEPTH=3 MEETING_DATE=2026-07-15 ./run-report-env.sh`
+- Preview expired run cleanup: `MODE=prune ./run-report-env.sh`
+- Apply expired run cleanup: `MODE=prune PRUNE_APPLY=1 ./run-report-env.sh`
 - Depth 비교 테스트: 먼저 `MODE=collect ./run-report-env.sh` 실행 후 `./run-depth-test.sh` — 동일 sealed snapshot으로 depth 1/2/3/4 생성·검증
 
 Mode boundaries
@@ -78,6 +82,10 @@ AI 요약은 호출당 1회로 고정하며 `--safe-mode --tools "" --no-session
 상태에서 입력 상한, quota, timeout, CLI 실행 또는 빈 응답 오류가 발생하면 `generate`를 실패시키고
 raw 초안으로 대체하지 않는다. `update`는 기존처럼 별도 실행이지만 실패한 generate 뒤에는 게시 단계로 진행하지 않는다.
 AI-enabled schema v2 generate는 시도별 자료를 `out/runs/<date>/<run-id>/`에 저장한다.
+schema v2 generate 시작 전에는 90일이 지난 `complete`·`validation_failed` run을 자동 정리한다.
+실행 중이거나 validation lock이 사용 중인 run, 비정상 경로·state, 심볼릭 링크는 삭제하지 않는다.
+정리 오류는 경고로 남기되 generate의 성공 여부를 바꾸지 않는다. 운영자가 정리 대상을 먼저
+확인할 때는 `MODE=prune` dry-run을 사용하고, 실제 삭제는 `PRUNE_APPLY=1`을 함께 지정한다.
 schema v2 프롬프트는 원문의 보호 사실을 `[[fact:T0001]]` 같은 값 없는 인라인 reference로
 치환한다. Claude는 reference만 복사하고, 응답 직후 코드가 catalog의 원문 표기를 채워
 `[[fact:T0001|5/8 PASS]]` full marker로 결정적으로 확장한다. 따라서 별도 sourceExcerpt catalog를
