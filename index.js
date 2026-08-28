@@ -116,6 +116,7 @@ const NON_OVERRIDABLE_V2_CODES = new Set([
   "unknown_fact_id",
   "fact_value_mismatch",
   "fact_subject_mismatch",
+  "invalid_test_ratio",
   "unmarked_protected_fact",
   "snapshot_hash_mismatch",
   "catalog_hash_mismatch",
