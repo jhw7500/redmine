@@ -92,6 +92,14 @@ function writeCandidates(snapshot, snapshotPath, meetingDate, config) {
   return candidatesPath;
 }
 
+function resolveOpenIssueVerifierOptions(config) {
+  const injected = config.openIssueVerifierOptions || {};
+  const unavailableRepos = config.unavailableRepos === undefined
+    ? (injected.unavailableRepos || {})
+    : config.unavailableRepos;
+  return { ...injected, unavailableRepos };
+}
+
 function validateDraft(snapshot, snapshotPath, reportPath, meetingDate, config, options = {}) {
   const reportContent = Object.prototype.hasOwnProperty.call(options, "reportContent")
     ? String(options.reportContent)
@@ -103,6 +111,7 @@ function validateDraft(snapshot, snapshotPath, reportPath, meetingDate, config, 
     snapshotHash: snapshot.contentHash,
     snapshotPath,
     repos: config.repos,
+    openIssueVerifierOptions: resolveOpenIssueVerifierOptions(config),
   });
   const validationPath = buildValidationPath(reportPath);
   writeJsonAtomic(validationPath, validation);
@@ -130,6 +139,7 @@ const NON_OVERRIDABLE_V2_CODES = new Set([
   "run_path_mismatch",
   "prompt_input_hash_mismatch",
   "raw_ai_draft_hash_mismatch",
+  "open_status_repo_unavailable",
 ]);
 
 function hasNonOverridableV2Issue(validation) {
@@ -396,7 +406,7 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
         snapshotPath,
         sectionHeader: config.env.sectionHeader,
         repos: config.repos,
-        openIssueVerifierOptions: config.openIssueVerifierOptions,
+        openIssueVerifierOptions: resolveOpenIssueVerifierOptions(config),
       }
     );
     result.validation.publishable = isPublishable(result.validation);
@@ -518,7 +528,7 @@ async function runRevalidate(config, meetingDate) {
       snapshotPath,
       sectionHeader: config.env.sectionHeader,
       repos: config.repos,
-      openIssueVerifierOptions: config.openIssueVerifierOptions,
+      openIssueVerifierOptions: resolveOpenIssueVerifierOptions(config),
     });
     const publishable = isPublishable(result.validation);
     if (publishable) {
@@ -896,7 +906,7 @@ async function runUpdate(config, meetingDate) {
       snapshotHash: snapshot.contentHash,
       sectionHeader: config.env.sectionHeader,
       repos: config.repos,
-      openIssueVerifierOptions: config.openIssueVerifierOptions,
+      openIssueVerifierOptions: resolveOpenIssueVerifierOptions(config),
     });
     const freshValidation = buildPublishTimeValidation(evidence.validation, publishTime);
     assertPublishable(freshValidation, config);
@@ -1038,6 +1048,7 @@ module.exports = {
   hasNonOverridableV2Issue,
   isPublishable,
   main,
+  resolveOpenIssueVerifierOptions,
   resolveRunMeetingDate,
   runCollect,
   runGenerate,
