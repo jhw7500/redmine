@@ -982,8 +982,13 @@ async function main() {
     }
     case "update":
       return runUpdate(config, meetingDate);
-    case "revalidate":
-      return runRevalidate(config, meetingDate);
+    case "revalidate": {
+      const result = await runRevalidate(config, meetingDate);
+      if (!isPublishable(result.validation) && config.env.validationMode === "block") {
+        process.exitCode = 2;
+      }
+      return result;
+    }
     default:
       throw new Error(`Unknown MODE: ${config.env.mode}. Use collect, generate, update, or revalidate.`);
   }
