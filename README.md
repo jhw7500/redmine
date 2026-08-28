@@ -78,7 +78,12 @@ AI 요약은 호출당 1회로 고정하며 `--safe-mode --tools "" --no-session
 상태에서 입력 상한, quota, timeout, CLI 실행 또는 빈 응답 오류가 발생하면 `generate`를 실패시키고
 raw 초안으로 대체하지 않는다. `update`는 기존처럼 별도 실행이지만 실패한 generate 뒤에는 게시 단계로 진행하지 않는다.
 AI-enabled schema v2 generate는 시도별 자료를 `out/runs/<date>/<run-id>/`에 저장한다.
-`draft.ai.annotated.md`는 Claude 원본이므로 수정하지 않고, 복구할 때는 `draft.working.annotated.md`만 수정한다.
+schema v2 프롬프트는 원문의 보호 사실을 `[[fact:T0001]]` 같은 값 없는 인라인 reference로
+치환한다. Claude는 reference만 복사하고, 응답 직후 코드가 catalog의 원문 표기를 채워
+`[[fact:T0001|5/8 PASS]]` full marker로 결정적으로 확장한다. 따라서 별도 sourceExcerpt catalog를
+프롬프트에 중복하지 않으며 Claude가 보호 숫자·단위를 직접 다시 쓸 필요가 없다.
+`draft.ai.annotated.md`는 bare reference가 포함될 수 있는 Claude 원본이므로 수정하지 않고,
+복구할 때는 full marker로 확장된 `draft.working.annotated.md`만 수정한다.
 `MODE=revalidate`는 같은 run에 `validation.NNN.json` revision을 새로 추가하며 Claude를 호출하지 않는다.
 검증 성공 시 marker가 제거된 `report.clean.md`만 canonical depth 보고서로 원자적으로 승격된다.
 schema v2 clean 보고서를 직접 편집하면 update가 Redmine 요청 전에 hash 불일치로 중단하며,
@@ -98,9 +103,9 @@ Artifacts
 - `out/jo-hyunwoo-YYYY-MM-DD.depthN.published.md`: Redmine에 실제 반영한 최종 조현우 섹션
 - `out/runs/YYYY-MM-DD/<run-id>/state.json`: schema v2 시도 상태와 최신 validation revision 소유권
 - `out/runs/YYYY-MM-DD/<run-id>/fact-catalog.json`: 원본에서 추출한 exact-copy 사실 catalog
-- `out/runs/YYYY-MM-DD/<run-id>/prompt-input.json`: snapshot/catalog/prompt/model 입력 증거
-- `out/runs/YYYY-MM-DD/<run-id>/draft.ai.annotated.md`: 변경 금지 Claude 원본 출력
-- `out/runs/YYYY-MM-DD/<run-id>/draft.working.annotated.md`: 실패 run 복구 시 수정할 annotated working draft
+- `out/runs/YYYY-MM-DD/<run-id>/prompt-input.json`: snapshot/catalog/prompt/model과 fact input mode 입력 증거
+- `out/runs/YYYY-MM-DD/<run-id>/draft.ai.annotated.md`: bare fact reference가 포함될 수 있는 변경 금지 Claude 원본 출력
+- `out/runs/YYYY-MM-DD/<run-id>/draft.working.annotated.md`: full marker로 확장된 실패 run 수동 복구 대상
 - `out/runs/YYYY-MM-DD/<run-id>/validation.NNN.json`: 덮어쓰지 않고 추가되는 검증 revision
 - `out/runs/YYYY-MM-DD/<run-id>/report.clean.md`: marker가 제거된 검증 성공 보고서
 

@@ -6,6 +6,11 @@
 - 관련 이슈: GitHub #25 `fix(report): validation 실패 시 AI 산출물 폐기율 축소 및 실패 원인 수렴`
 - 선행 작업: GitHub #24 AI 실행 예산 및 중복 게시 제한
 
+> 2026-08-28 개정: 실제 Claude 파일럿에서 별도 catalog의 marker 377개가 모두 누락된 결과를 반영해
+> generate 입력은 인라인 불투명 reference + 결정적 full-marker 확장 방식으로 변경한다.
+> 상세 계약은 `2026-08-28-inline-fact-reference-design.md`를 따른다. 기존 validator, working draft,
+> revalidate 및 update 계약은 유지한다.
+
 ## 1. 배경과 사고 판정
 
 2026-08-26 KST 주간보고 `generate`는 Claude 응답을 한 번 정상 수신했지만 사실 검증에서 실패했다.

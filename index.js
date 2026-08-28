@@ -4,6 +4,10 @@ const path = require("path");
 const { loadConfig } = require("./lib/config");
 const { buildFactCatalog } = require("./lib/fact-catalog");
 const {
+  annotateFactReferences,
+  expandFactReferences,
+} = require("./lib/fact-references");
+const {
   validateAnnotatedReport,
   validateNonFactRules,
   validateReport,
@@ -284,7 +288,7 @@ function markRecoverableRunFailure(runPaths, generationStatePath, attemptId, err
   });
 }
 
-async function runGenerateV2(config, meetingDate) {
+async function runGenerateV2(config, meetingDate, dependencies = {}) {
   const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
   const reportPath = buildOutputPath(meetingDate, config);
   const generationStatePath = buildGenerationStatePath(reportPath);
@@ -312,15 +316,19 @@ async function runGenerateV2(config, meetingDate) {
   });
 
   try {
-    initializeReportRun(runPaths, { ...generationStateBase, status: "running" });
-    runInitialized = true;
-    writeCandidates(snapshot, snapshotPath, meetingDate, config);
-
     const catalog = buildFactCatalog(snapshot.rawContent, [{
       type: "meeting_date",
       raw: meetingDateText,
       subject: "meeting date",
     }]);
+    const factInputMode = "inline_refs";
+    const annotateSource = dependencies.annotateFactReferences || annotateFactReferences;
+    const aiSource = annotateSource(snapshot.rawContent, catalog);
+
+    initializeReportRun(runPaths, { ...generationStateBase, status: "running" });
+    runInitialized = true;
+    writeCandidates(snapshot, snapshotPath, meetingDate, config);
+
     writeImmutableArtifact(
       runPaths.catalogPath,
       JSON.stringify(catalog, null, 2) + "\n"
@@ -328,11 +336,15 @@ async function runGenerateV2(config, meetingDate) {
     updateRunState(runPaths, attemptId, { catalogHash: catalog.catalogHash });
     writeOwnedOrThrow(generationStatePath, attemptId, { catalogHash: catalog.catalogHash });
 
-    const prompt = buildAiPrompt(snapshot.rawContent, config, meetingDate, { factCatalog: catalog });
+    const prompt = buildAiPrompt(aiSource, config, meetingDate, {
+      factCatalog: catalog,
+      factInputMode,
+    });
     const serializedPromptInput = JSON.stringify({
       snapshotPath,
       snapshotHash: snapshot.contentHash,
       catalogHash: catalog.catalogHash,
+      factInputMode,
       promptHash: sha256(prompt),
       model: config.env.aiModel,
       effort: config.env.aiEffort,
@@ -345,8 +357,9 @@ async function runGenerateV2(config, meetingDate) {
     writeOwnedOrThrow(generationStatePath, attemptId, { promptInputHash });
 
     aiStarted = true;
-    const generated = await generateContent(config, meetingDate, snapshot.rawContent, {
+    const generated = await generateContent(config, meetingDate, aiSource, {
       factCatalog: catalog,
+      factInputMode,
       prompt,
       onRawAiOutput: (rawAiOutput) => {
         writeImmutableArtifact(runPaths.aiDraftPath, rawAiOutput);
@@ -355,12 +368,13 @@ async function runGenerateV2(config, meetingDate) {
         writeOwnedOrThrow(generationStatePath, attemptId, { rawAiDraftHash });
       },
     });
-    writeImmutableArtifact(runPaths.workingDraftPath, generated.content);
+    const workingContent = expandFactReferences(generated.content, catalog);
+    writeImmutableArtifact(runPaths.workingDraftPath, workingContent);
     updateRunState(runPaths, attemptId, {
       status: "ai_complete",
       sanitizer: {
         inputHash: sha256(generated.rawAiOutput),
-        outputHash: sha256(generated.content),
+        outputHash: sha256(workingContent),
       },
       aiCompletedAt: new Date().toISOString(),
     });
@@ -368,7 +382,7 @@ async function runGenerateV2(config, meetingDate) {
 
     const result = validateAnnotatedReport(
       snapshot.rawContent,
-      generated.content,
+      workingContent,
       catalog,
       {
         attemptId,
