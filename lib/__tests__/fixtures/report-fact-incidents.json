@@ -1,0 +1,7 @@
+{
+  "raw": "#### <span style=\"color:blue\">조현우</span>\n- 보드 실행 5/8 PASS\n- 플릿 16건 저장소 전면 배포\n",
+  "valid": "#### <span style=\"color:blue\">조현우</span>\n- 보드 실행 [[fact:T0001|5/8 PASS]]\n- 플릿 [[fact:Q0001|16건]] 저장소 전면 배포\n",
+  "changedRatio": "#### <span style=\"color:blue\">조현우</span>\n- 보드 실행 [[fact:T0001|10/11 PASS]]\n",
+  "changedPassFail": "#### <span style=\"color:blue\">조현우</span>\n- 보드 실행 [[fact:T0001|10건 PASS, 실패 1건]]\n",
+  "changedCounter": "#### <span style=\"color:blue\">조현우</span>\n- 플릿 [[fact:Q0001|16개]] 저장소 전면 배포\n"
+}
