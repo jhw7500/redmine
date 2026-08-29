@@ -23,6 +23,7 @@ const {
   writeJsonAtomic,
 } = require("./lib/report-artifact");
 const { collectSnapshot, loadSnapshot } = require("./lib/report-snapshot");
+const { pruneRunArtifacts } = require("./lib/report-run-pruner");
 const {
   blockingWarnings,
   isPublishable,
@@ -197,6 +198,57 @@ async function runCollect(config, meetingDate) {
   return result;
 }
 
+function printPruneSummary(summary, { dryRun }) {
+  console.log(
+    `[prune] mode=${dryRun ? "dry-run" : "apply"}`
+    + ` retentionDays=${summary.retentionDays}`
+    + ` examined=${summary.examined}`
+    + ` eligible=${summary.eligible}`
+    + ` deleted=${summary.deleted}`
+    + ` skipped=${summary.skipped}`
+    + ` errors=${summary.errors}`
+  );
+  const reasons = Object.entries(summary.skippedReasons || {})
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([reason, count]) => `${reason}=${count}`)
+    .join(",");
+  if (reasons) console.log(`[prune] skippedReasons=${reasons}`);
+}
+
+function runPrune(config, options = {}) {
+  const dryRun = options.dryRun ?? !config.env.pruneApply;
+  const retentionDays = config.env.runArtifactRetentionDays ?? 90;
+  const prune = options.pruneRunArtifacts || pruneRunArtifacts;
+  const summary = prune({
+    outputDir: config.env.outputDir,
+    retentionDays,
+    dryRun,
+    now: options.now,
+  });
+  const result = {
+    retentionDays,
+    ...summary,
+  };
+  printPruneSummary(result, { dryRun });
+  return result;
+}
+
+function runAutomaticPrune(config, dependencies = {}) {
+  try {
+    const result = runPrune(config, {
+      dryRun: false,
+      pruneRunArtifacts: dependencies.pruneRunArtifacts,
+    });
+    if (result.errors > 0) {
+      console.warn(`[prune] automatic cleanup errors=${result.errors}; generate continues`);
+    }
+    return result;
+  } catch (error) {
+    console.warn(`[prune] automatic cleanup failed: ${error.message}; generate continues`);
+    return null;
+  }
+}
+
 function writeGenerationStateIfOwned(statePath, attemptId, patch) {
   try {
     return withGenerationStateLock(statePath, () => {
@@ -303,6 +355,7 @@ function markRecoverableRunFailure(runPaths, generationStatePath, attemptId, err
 }
 
 async function runGenerateV2(config, meetingDate, dependencies = {}) {
+  runAutomaticPrune(config, dependencies);
   const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
   const reportPath = buildOutputPath(meetingDate, config);
   const generationStatePath = buildGenerationStatePath(reportPath);
@@ -1003,9 +1056,15 @@ async function runUpdate(config, meetingDate) {
 
 async function main() {
   const config = loadConfig();
+  console.log(`Mode: ${config.env.mode}`);
+  if (config.env.mode === "prune") {
+    const result = runPrune(config);
+    if (result.errors > 0) process.exitCode = 1;
+    return result;
+  }
+
   const meetingDate = resolveRunMeetingDate(config);
   console.log(`Meeting date: ${formatDate(meetingDate)}`);
-  console.log(`Mode: ${config.env.mode}`);
 
   switch (config.env.mode) {
     case "collect":
@@ -1029,7 +1088,7 @@ async function main() {
       return result;
     }
     default:
-      throw new Error(`Unknown MODE: ${config.env.mode}. Use collect, generate, update, or revalidate.`);
+      throw new Error(`Unknown MODE: ${config.env.mode}. Use collect, generate, update, revalidate, or prune.`);
   }
 }
 
@@ -1053,6 +1112,7 @@ module.exports = {
   runCollect,
   runGenerate,
   runGenerateV2,
+  runPrune,
   runRevalidate,
   runUpdate,
   validateDraft,
