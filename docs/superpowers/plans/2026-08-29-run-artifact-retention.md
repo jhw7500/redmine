@@ -4,9 +4,9 @@
 
 **Goal:** Delete schema v2 run artifacts older than 90 days through a safe dry-run/apply operation and invoke it non-blockingly before schema v2 generation.
 
-**Architecture:** A focused `report-run-pruner` module inventories only strict date/UUID run directories, validates terminal ownership and age, probes the existing validation lock, and deletes eligible directories only in apply mode. Configuration and `index.js` expose the policy through `MODE=prune` and a non-blocking schema v2 generate hook.
+**Architecture:** A focused `report-run-pruner` module inventories only strict date/UUID run directories, validates schema-v2 terminal ownership and age, probes locks in dry-run, and in apply mode holds the validation lock while deleting an inode-verified quarantined run beneath a pinned date directory. Configuration and `index.js` expose the policy through `MODE=prune` and a non-blocking schema v2 generate hook.
 
-**Tech Stack:** Node.js CommonJS, `node:test`, built-in `fs/path/child_process`, Linux `flock`
+**Tech Stack:** Node.js CommonJS, `node:test`, built-in `fs/path/child_process`, Linux `/proc` and `flock`
 
 **Spec:** `docs/superpowers/specs/2026-08-29-run-artifact-retention-design.md`
 
@@ -15,7 +15,7 @@
 - Default retention is exactly 90 days; no count or disk-size limit.
 - Only direct `runs/YYYY-MM-DD/<UUID-v4>` real directories are candidates.
 - Only `complete` and `validation_failed` states older than the cutoff are eligible.
-- Malformed paths/state, symlinks, active states, and busy validation locks fail closed.
+- Malformed paths/state ownership, symlinks, active states, identity changes, and busy validation locks fail closed.
 - `MODE=prune` defaults to dry-run; only `PRUNE_APPLY=1` deletes.
 - Automatic cleanup errors never change schema v2 generate success.
 - Add no dependencies and do not change external crontab files.
@@ -106,9 +106,11 @@ Expected: FAIL on the first unimplemented skip reason or lock check.
 
 - [x] **Step 7: Implement minimal skip reasons and lock probe**
 
-Probe an existing `.validation.lock` with synchronous non-blocking `flock`.
-Do not invoke `flock` when the file does not exist, so dry-run creates nothing.
-Treat a busy exit as `locked`; treat spawn errors as a recorded per-run error.
+In dry-run, probe an existing `.validation.lock` with synchronous non-blocking
+`flock` and create nothing. In apply mode, hold the validation lock through an
+atomic quarantine rename, device/inode verification, and recursive deletion
+beneath an open date-directory descriptor. Treat a busy exit as `locked` and
+other helper or deletion failures as recorded per-run errors.
 
 - [x] **Step 8: Run Task 1 tests and inspect the diff**
 

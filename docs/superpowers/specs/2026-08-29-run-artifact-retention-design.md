@@ -78,11 +78,13 @@ A run is eligible only when all of these conditions hold:
 2. Their resolved parents remain exactly inside the resolved `runs` root and
    date directory.
 3. `state.json` is readable JSON.
-4. `state.attemptId` exactly matches the directory UUID.
-5. `state.startedAt` is a valid timestamp earlier than
+4. `state.schemaVersion` is exactly `2` and `state.meetingDate` exactly matches
+   the date directory.
+5. `state.attemptId` exactly matches the directory UUID.
+6. `state.startedAt` is a valid timestamp earlier than
    `now - retentionDays`.
-6. `state.status` is `complete` or `validation_failed`.
-7. The run validation lock is not currently held.
+7. `state.status` is `complete` or `validation_failed`.
+8. The run validation lock can be acquired non-blockingly.
 
 `running` and `ai_complete` are active states and are always skipped. A
 `validation_failed` run remains recoverable during the 90-day window and
@@ -96,9 +98,12 @@ sidecar as a pin would retain at least one run per report forever and defeat the
 90-day policy.
 
 The documented cron wrapper's `report-run.lock` remains the outer operational
-serialization boundary. The validation-lock probe prevents deletion of a run
-that is being revalidated. The probe does not create a lock file during a
-dry-run.
+serialization boundary. Dry-run only probes an existing validation lock and
+does not create a lock file. Apply acquires the validation lock and holds it
+through deletion. It pins the verified date directory with a file descriptor,
+atomically renames the run to an unpredictable quarantine name, verifies the
+quarantined directory's device and inode, and only then recursively deletes it.
+This prevents a replaced parent path from redirecting deletion outside `runs`.
 
 ## 7. Fail-closed rules
 
@@ -108,10 +113,12 @@ The pruner skips rather than repairs or guesses when it encounters:
 - a symbolic link at either directory level;
 - a real path outside the expected parent;
 - missing, unreadable, or malformed `state.json`;
+- a non-v2 schema or meeting-date ownership mismatch;
 - an attempt ID mismatch;
 - a missing or invalid `startedAt`;
 - an unknown or active status;
-- a busy validation lock.
+- a busy validation lock;
+- a run identity change during quarantine.
 
 Dry-run and apply use the same inventory and eligibility function. Dry-run does
 not delete directories or create lock files.
