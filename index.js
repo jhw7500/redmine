@@ -444,7 +444,11 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       identifierRestoredContent,
       catalog
     );
-    const workingContent = normalizeOpenStatusAsOfClauses(countedQuantityRestoredContent);
+    const meetingDateFact = catalog.facts.find((fact) => fact.type === "meeting_date");
+    const workingContent = normalizeOpenStatusAsOfClauses(
+      countedQuantityRestoredContent,
+      meetingDateFact
+    );
     writeImmutableArtifact(runPaths.workingDraftPath, workingContent);
     updateRunState(runPaths, attemptId, {
       status: "ai_complete",
