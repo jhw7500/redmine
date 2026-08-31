@@ -82,7 +82,7 @@ AI 요약은 호출당 1회로 고정하며 `--safe-mode --tools "" --no-session
 상태에서 입력 상한, quota, timeout, CLI 실행 또는 빈 응답 오류가 발생하면 `generate`를 실패시키고
 raw 초안으로 대체하지 않는다. `update`는 기존처럼 별도 실행이지만 실패한 generate 뒤에는 게시 단계로 진행하지 않는다.
 AI-enabled schema v2 generate는 시도별 자료를 `out/runs/<date>/<run-id>/`에 저장한다.
-schema v2 generate 시작 전에는 90일이 지난 `complete`·`validation_failed` run을 자동 정리한다.
+schema v2 generate 시작 전에는 90일이 지난 `ai_failed`·`complete`·`validation_failed` run을 자동 정리한다.
 실행 중이거나 validation lock이 사용 중인 run, 비정상 경로·state 소유권, 심볼릭 링크는 삭제하지 않는다.
 실제 삭제는 validation lock을 끝까지 보유하고 검증된 날짜 디렉터리 아래에서 inode가 일치하는
 격리 run만 제거한다.
