@@ -92,6 +92,12 @@ schema v2 프롬프트는 원문의 보호 사실을 `[[fact:T0001]]` 같은 값
 치환한다. Claude는 reference만 복사하고, 응답 직후 코드가 catalog의 원문 표기를 채워
 `[[fact:T0001|5/8 PASS]]` full marker로 결정적으로 확장한다. 따라서 별도 sourceExcerpt catalog를
 프롬프트에 중복하지 않으며 Claude가 보호 숫자·단위를 직접 다시 쓸 필요가 없다.
+Claude가 reference를 누락하고 `aarch64`처럼 영문과 숫자가 섞인 식별자를 원문 표기 그대로 쓴
+경우에는 코드가 full marker를 복원한다. 같은 표기가 catalog에 한 번만 있거나, 중복 표기 중
+출력 줄과 `sourceExcerpt`의 문맥 토큰이 2개 이상 일치하는 유일한 후보가 있을 때만 복원한다.
+동점·문맥 부족은 계속 검증 실패로 남기며, 수량·날짜·버전·PASS/FAIL·단위는 자동 복원하지 않는다.
+`V4L2`, `v2ray`처럼 `v` 다음에 숫자가 오는 토큰은 기술 ID와 버전을 문자열만으로 구분할 수
+없으므로 모두 자동 복원에서 제외하고 기존 검증기가 fail-closed한다.
 `draft.ai.annotated.md`는 bare reference가 포함될 수 있는 Claude 원본이므로 수정하지 않고,
 복구할 때는 full marker로 확장된 `draft.working.annotated.md`만 수정한다.
 `MODE=revalidate`는 같은 run에 `validation.NNN.json` revision을 새로 추가하며 Claude를 호출하지 않는다.
