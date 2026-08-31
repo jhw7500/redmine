@@ -6,6 +6,7 @@ const { buildFactCatalog } = require("./lib/fact-catalog");
 const {
   annotateFactReferences,
   expandFactReferences,
+  restoreUnmarkedCountedQuantityReferences,
   restoreUnmarkedIdentifierReferences,
 } = require("./lib/fact-references");
 const {
@@ -14,6 +15,7 @@ const {
   validateReport,
 } = require("./lib/fact-validator");
 const { publishNotes } = require("./lib/notion-issue-publisher");
+const { normalizeOpenStatusAsOfClauses } = require("./lib/open-status-normalizer");
 const { selectPresentationNotes } = require("./lib/presentation-note-classifier");
 const {
   buildCandidatesPath,
@@ -437,7 +439,12 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       },
     });
     const expandedContent = expandFactReferences(generated.content, catalog);
-    const workingContent = restoreUnmarkedIdentifierReferences(expandedContent, catalog);
+    const identifierRestoredContent = restoreUnmarkedIdentifierReferences(expandedContent, catalog);
+    const countedQuantityRestoredContent = restoreUnmarkedCountedQuantityReferences(
+      identifierRestoredContent,
+      catalog
+    );
+    const workingContent = normalizeOpenStatusAsOfClauses(countedQuantityRestoredContent);
     writeImmutableArtifact(runPaths.workingDraftPath, workingContent);
     updateRunState(runPaths, attemptId, {
       status: "ai_complete",
