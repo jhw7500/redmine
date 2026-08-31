@@ -22,7 +22,7 @@
 | Success Criteria | 4/5 완전 충족, 1/5 부분 충족 |
 | 신규 파일 | 5개 (index.js, lib/3개, translation-rules.json) |
 | 수정 파일 | 3개 (repo-config.json, run-*-env.sh 2개, .env) |
-| 삭제 파일 | 3개 (레거시 Playwright, 구 경로 스크립트 2개) |
+| 삭제 파일 | 4개 (레거시 API/Playwright, 구 경로 스크립트 2개) |
 | Gap | 3건 (Low 2, Medium 1, 모두 기능 영향 없음) |
 
 ### 1.3 Value Delivered
@@ -56,7 +56,7 @@
 | D2 | repo-config.json 확장으로 설정 통합 | Plan §4.1 | ✅ | repos/categories/commitTypes/trivialPatterns/defaults 5개 섹션 |
 | D3 | translation-rules.json으로 번역 규칙 외부화 | Plan §4.1 | ✅ | 76개 규칙 추출, 코드 무수정으로 규칙 추가 가능 |
 | D4 | .env는 시크릿만 | Design §7 | ✅ | REPO_LIST/경로 설정 5개 항목 제거 |
-| D5 | 레거시 파일 정리 | Design §2.2 | ✅ | 3개 삭제, api.js 롤백용 유지 |
+| D5 | 레거시 파일 정리 | Design §2.2 | ✅ | 레거시 API/Playwright와 구 경로 스크립트 2개 삭제 |
 
 ---
 
@@ -76,7 +76,7 @@ SC5 참고: Design에서 예상한 줄 수(~180, ~150)보다 실제 기존 함�
 
 ---
 
-## 5. 최종 파일 구조
+## 5. 최종 파일 구조 (2026-04-06 완료 시점)
 
 ```
 projects/redmine/
@@ -94,7 +94,6 @@ projects/redmine/
 ├── out/                        # 생성 결과물
 │   ├── jo-hyunwoo-2026-04-01.baseline.md  # 기준선 (롤백 비교용)
 │   └── ...
-├── update-jo-hyunwoo.api.js    # 롤백용 유지 (안정 확인 후 삭제)
 └── docs/                       # PDCA 문서
     ├── 01-plan/features/redmine-report.plan.md
     ├── 02-design/features/redmine-report.design.md
@@ -104,10 +103,10 @@ projects/redmine/
 
 ---
 
-## 6. 남은 작업
+## 6. 후속 작업 현황
 
-| # | 항목 | 우선순위 | 설명 |
-|---|------|----------|------|
-| 1 | `update-jo-hyunwoo.api.js` 삭제 | Low | cron 1~2주 안정 운영 확인 후 제거 |
-| 2 | cron 실제 실행 확인 | Medium | `run-generate-env.sh`의 cron 등록 상태 확인 |
-| 3 | `pim-check` 카테고리 템플릿 반영 | Low | `templates/jo-hyunwoo.md`에 `{{PIM_TEST_KO}}` 플레이스홀더 추가 |
+| # | 항목 | 상태 | 확인 근거 |
+|---|------|------|-----------|
+| 1 | `update-jo-hyunwoo.api.js` 삭제 | 완료 | 완료 커밋 `be76e097`에서 이미 삭제됨(기존 보존 기록 정정) |
+| 2 | cron 실제 실행 확인 | 완료 | `run-report-env.sh` 기반 작업 등록 및 2026-08-26 실행 확인: collect 성공, generate는 검증 오류로 exit 2, update는 exit 1로 게시 차단 |
+| 3 | `pim-check` 카테고리 템플릿 반영 | 완료 | `templates/jo-hyunwoo.md`에 `{{PIM_TEST_KO}}` 반영됨 |

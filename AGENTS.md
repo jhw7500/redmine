@@ -37,7 +37,7 @@ Redmine `advance-development-team` 프로젝트의 **작업(Issue)**으로 자�
   또는 `--start YYYY-MM-DD --end YYYY-MM-DD`.
 - 설계/계획: `docs/superpowers/specs|plans/2026-07-02-*presentation-note-issue*`.
 
-## (참고) 후속 대책 — 다른 repo, 별도 적용 필요
+## (참고) 후속 대책 — 다른 repo, 적용 완료
 
-- **personal-ops `session-summary.sh`**: "### 미완료 항목"에 resolution back-link 추적 — 직전 미완료 항목이 후속 커밋으로 닫히면 다음 요약에 `[resolved by <commit>]` 표기. → 1번 규칙의 수작업 대조를 데이터 소스 단에서 줄임.
-- **gstApp `json_get_int_array`**: 길이 불일치 시 silent `keep defaults`(→ 4096 고정 같은 무증상 설정 무시)를 **시작 시 치명 설정오류로 집계·노출**. + 매직 길이(`MAX_MODE`) 금지·배열에서 파생 + 길이 회귀 단위테스트.
+- **personal-ops `session-summary.sh`**: "### 미완료 항목"의 resolution back-link를 검증·추적하도록 적용 완료. 직전 미완료 항목이 후속 커밋으로 닫히면 검증된 `[resolved by <commit>]`을 기록한다. [PR #19](https://github.com/jhw7500/personal-ops/pull/19), merge `9fecfade8cd48ae004ac4b375061f214a68eacf7`.
+- **gstApp 설정 배열 파서**: 잘못된 타입·길이·원소와 명시적 `null`을 채널별로 집계해 시작 전 치명 설정 오류로 노출하고, 선택 배열 누락만 기존 기본값을 유지하도록 적용 완료. 실제 파서 회귀 테스트도 추가했다. [PR #71](https://github.com/jhw7500/gstApp/pull/71), merge `a476cb64cd3b4666a03deda0b9fab2d10b33e4a0`.
