@@ -104,10 +104,10 @@ projects/redmine/
 
 ---
 
-## 6. 남은 작업
+## 6. 후속 작업 현황
 
-| # | 항목 | 우선순위 | 설명 |
-|---|------|----------|------|
-| 1 | `update-jo-hyunwoo.api.js` 삭제 | Low | cron 1~2주 안정 운영 확인 후 제거 |
-| 2 | cron 실제 실행 확인 | Medium | `run-generate-env.sh`의 cron 등록 상태 확인 |
-| 3 | `pim-check` 카테고리 템플릿 반영 | Low | `templates/jo-hyunwoo.md`에 `{{PIM_TEST_KO}}` 플레이스홀더 추가 |
+| # | 항목 | 상태 | 확인 근거 |
+|---|------|------|-----------|
+| 1 | `update-jo-hyunwoo.api.js` 삭제 | 완료 | 저장소에서 제거됨 |
+| 2 | cron 실제 실행 확인 | 완료 | `run-report-env.sh` 기반 collect/generate/update가 등록됐고, 2026-08-26 실행 로그 확인. 검증 실패 보고서는 게시 전에 차단됨 |
+| 3 | `pim-check` 카테고리 템플릿 반영 | 완료 | `templates/jo-hyunwoo.md`에 `{{PIM_TEST_KO}}` 반영됨 |
