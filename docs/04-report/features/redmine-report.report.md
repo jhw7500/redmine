@@ -76,7 +76,7 @@ SC5 참고: Design에서 예상한 줄 수(~180, ~150)보다 실제 기존 함�
 
 ---
 
-## 5. 최종 파일 구조
+## 5. 최종 파일 구조 (2026-04-06 완료 시점)
 
 ```
 projects/redmine/
@@ -109,5 +109,5 @@ projects/redmine/
 | # | 항목 | 상태 | 확인 근거 |
 |---|------|------|-----------|
 | 1 | `update-jo-hyunwoo.api.js` 삭제 | 완료 | 저장소에서 제거됨 |
-| 2 | cron 실제 실행 확인 | 완료 | `run-report-env.sh` 기반 collect/generate/update가 등록됐고, 2026-08-26 실행 로그 확인. 검증 실패 보고서는 게시 전에 차단됨 |
+| 2 | cron 실제 실행 확인 | 완료 | `run-report-env.sh` 기반 작업 등록 및 2026-08-26 실행 확인: collect 성공, generate는 검증 오류로 exit 2, update는 exit 1로 게시 차단 |
 | 3 | `pim-check` 카테고리 템플릿 반영 | 완료 | `templates/jo-hyunwoo.md`에 `{{PIM_TEST_KO}}` 반영됨 |
