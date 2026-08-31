@@ -94,7 +94,6 @@ projects/redmine/
 ├── out/                        # 생성 결과물
 │   ├── jo-hyunwoo-2026-04-01.baseline.md  # 기준선 (롤백 비교용)
 │   └── ...
-├── update-jo-hyunwoo.api.js    # 롤백용 유지 (안정 확인 후 삭제)
 └── docs/                       # PDCA 문서
     ├── 01-plan/features/redmine-report.plan.md
     ├── 02-design/features/redmine-report.design.md
