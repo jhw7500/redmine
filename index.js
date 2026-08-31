@@ -6,6 +6,7 @@ const { buildFactCatalog } = require("./lib/fact-catalog");
 const {
   annotateFactReferences,
   expandFactReferences,
+  restoreUnmarkedIdentifierReferences,
 } = require("./lib/fact-references");
 const {
   validateAnnotatedReport,
@@ -435,7 +436,8 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
         writeOwnedOrThrow(generationStatePath, attemptId, { rawAiDraftHash });
       },
     });
-    const workingContent = expandFactReferences(generated.content, catalog);
+    const expandedContent = expandFactReferences(generated.content, catalog);
+    const workingContent = restoreUnmarkedIdentifierReferences(expandedContent, catalog);
     writeImmutableArtifact(runPaths.workingDraftPath, workingContent);
     updateRunState(runPaths, attemptId, {
       status: "ai_complete",

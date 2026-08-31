@@ -46,7 +46,21 @@ clean report:  보드 실행 5/8 PASS
 
 확장은 문자열 치환이며 LLM을 호출하지 않는다. 알려지지 않은 reference와 문법이 깨진 reference는 그대로 남겨 기존 `parseAnnotatedDraft()`가 `malformed_fact_marker`로 차단하게 한다. full marker를 직접 출력한 기존 테스트·수동 산출물은 그대로 validator가 처리한다.
 
-### 3.3 산출물 호환성
+### 3.3 영숫자 식별자 reference 복원 (2026-08-31 개정)
+
+실제 schema v2 파일럿에서 Claude는 모든 bare reference를 누락했지만 원본 식별자 `aarch64`, `max9296`는 정확히 출력했다. 따라서 bare-reference 확장 후에도 marker 밖에 남은 `alphanumeric_identifier`에 한해 코드가 full marker를 복원한다.
+
+- 출력 표기는 catalog `raw`와 대소문자까지 완전히 같아야 한다.
+- 같은 표기가 원본에 한 번만 있으면 해당 fact ID를 사용한다.
+- 같은 표기가 여러 번이면 출력 줄과 각 `sourceExcerpt`의 문맥 토큰 교집합을 비교한다. 최고 점수가 2 이상이고 유일할 때만 해당 위치의 fact ID를 사용한다.
+- 동점, 문맥 부족, catalog에 없는 식별자는 복원하지 않아 기존 `unmarked_protected_fact`가 차단한다.
+- 테스트 결과, 수량, 날짜, 버전, 비율, 단위 등 숫자 사실은 사후 자동 결속 대상이 아니다.
+- `V4L2`, `v2ray`처럼 `v` 다음에 숫자가 오는 표기는 기술 ID와 버전을 결정적으로 구분할 수 없으므로 모두 복원하지 않는다.
+- 이미 정상인 full marker와 unknown/malformed marker 내부는 수정하지 않는다.
+
+이 복원은 표시 문자열과 원본 위치를 결정적으로 선택할 수 있는 좁은 호환 경계다. 숫자 의미나 센 대상을 추론하지 않으며 검증기 규칙도 완화하지 않는다.
+
+### 3.4 산출물 호환성
 
 - `draft.ai.annotated.md`: Claude의 원본 응답을 그대로 보존하므로 bare reference가 들어갈 수 있다.
 - `draft.working.annotated.md`: 결정적 확장 후의 기존 full marker 형식만 저장한다.
