@@ -65,6 +65,7 @@ const { validateV2ReportContract } = require("./lib/report-contract");
 const {
   annotateSourceCoverageReferences,
   buildSourceCoverageCatalog,
+  reconcileMissingSourceCoverage,
 } = require("./lib/source-coverage");
 
 function resolveRunMeetingDate(config, now = new Date()) {
@@ -479,14 +480,24 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       identifierRestoredContent,
       catalog
     );
+    const expandedAnnotatedSource = expandFactReferences(aiSource, catalog);
+    const sourceCoverageReconciliation = reconcileMissingSourceCoverage(
+      countedQuantityRestoredContent,
+      expandedAnnotatedSource,
+      coverageCatalog
+    );
     const meetingDateFact = catalog.facts.find((fact) => fact.type === "meeting_date");
     const workingContent = normalizeOpenStatusAsOfClauses(
-      countedQuantityRestoredContent,
+      sourceCoverageReconciliation.content,
       meetingDateFact
     );
     writeImmutableArtifact(runPaths.workingDraftPath, workingContent);
     updateRunState(runPaths, attemptId, {
       status: "ai_complete",
+      sourceCoverageReconciliation: {
+        addedSectionIds: sourceCoverageReconciliation.addedSectionIds,
+        addedItemIds: sourceCoverageReconciliation.addedItemIds,
+      },
       sanitizer: {
         inputHash: sha256(generated.rawAiOutput),
         outputHash: sha256(workingContent),
