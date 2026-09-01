@@ -128,18 +128,18 @@ Artifacts
 
 Source coverage contract (schema v2)
 - `source-coverage.json`의 `C0001` 같은 `C` marker는 내용이 있는 설정 기반 **section heading**을 뜻한다. 해당 heading은 catalog의 canonical category path에 정확히 한 번 존재해야 한다.
-- `N0001` 같은 `N` marker는 입력의 각 `[Notion]` bullet을 뜻한다. 여러 항목을 한 bullet로 요약할 수는 있지만, 보고 기간에 수집된 모든 Notion 항목은 각 ID가 정확히 한 번, 원래 canonical path 안에 남아야 한다.
-- 즉, populated configured section과 모든 Notion 항목은 선택 사항이 아니다. 누락·중복·변조·다른 category로의 이동은 coverage validation failure이며 publishable이 아니다.
-- coverage 적용 run은 `state.json`, 전역 `*.generation.json`, `prompt-input.json`, `validation.NNN.json`에 `sourceCoverageMode: "required_sections_and_notion_v1"`와 동일한 `coverageCatalogHash`를 기록한다. revalidate와 update는 이 값과 `source-coverage.json`의 hash 소유권을 대조한다.
+- `N0001` 같은 `N` marker는 입력의 각 `[Notion]` bullet을 뜻한다. 요약에 남긴 Notion 항목은 marker를 원래 canonical path 안에 유지한다. 요약에서 제외된 item의 누락과 같은 path 안의 중복은 coverage warning/지표로 남지만 publish를 차단하지 않는다.
+- populated configured section의 누락·중복·잘못된 heading/path는 차단한다. unknown/malformed marker와 `N` marker의 다른 category 이동도 계속 차단한다.
+- coverage 적용 run은 `state.json`, 전역 `*.generation.json`, `prompt-input.json`, `validation.NNN.json`에 `sourceCoverageMode: "required_sections_notion_advisory_v2"`와 동일한 `coverageCatalogHash`를 기록한다. revalidate와 update는 이 값과 `source-coverage.json`의 hash 소유권을 대조한다.
 - coverage validation이 실패하면 같은 generate run에서 Claude를 다시 호출하지 않는다. `draft.ai.annotated.md`는 immutable 원본으로 남기고, 운영자는 **`draft.working.annotated.md`만** 수동 수정한 다음 `MODE=revalidate RUN_ID=<uuid>`를 실행한다.
-- generate는 Claude 출력에 `missing_source_id`만 있을 때 누락 coverage를 원본으로 결정적
-  보완한다. 누락 `C` marker는 유일한 canonical heading에만 붙이고, 누락 `N` marker는
-  fact-annotated 원본 `[Notion]` 제목을 해당 canonical path 끝에 추가한다. 이 과정은 Claude를
-  다시 호출하지 않으며 요약문·숫자·단위를 새로 만들지 않는다. 추가한 ID는 run `state.json`의
-  `sourceCoverageReconciliation.addedSectionIds|addedItemIds`에 기록한다.
-- duplicate·misplaced·malformed marker나 중복 canonical heading이 하나라도 있으면 결정적 보완을
-  적용하지 않는다. source 보완 뒤에도 원본 없는 보호 사실과 open-status 검증 실패는 그대로
-  publish를 차단한다.
+- generate는 누락 `C` marker를 유일한 exact canonical heading에만 붙인다. 유일한 `C` marker가
+  leaf heading 이름만 바꿨다면 부모 path와 들여쓰기가 원본과 일치할 때만 fact-annotated canonical
+  heading으로 복원한다. 단, 교체할 heading 줄에 보호 사실이나 fact/source-like marker가 하나라도
+  있으면 내용을 지우지 않고 정규화를 거부한다. 유일한 예외는 C marker가 줄 끝에 있고 leaf 전체가
+  다른 configured canonical leaf와 정확히 일치하는 명백한 section-name 전치다. 결과는 run
+  `state.json`의 `sourceCoverageNormalization`에 기록한다.
+- 누락 `N` marker의 원문 bullet은 자동으로 덧붙이지 않는다. source normalization 뒤에도 원본
+  없는 보호 사실과 open-status 검증 실패는 그대로 publish를 차단한다.
 - coverage catalog/hash/validation ownership이 없거나 일치하지 않으면 `MODE=update`는 Redmine API 요청 전에 실패한다. 이 coverage-specific failure는 `VALIDATION_OVERRIDE=1`로 우회할 수 없다.
 
 Pilot and publication approval

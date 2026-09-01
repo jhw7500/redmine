@@ -65,7 +65,7 @@ const { validateV2ReportContract } = require("./lib/report-contract");
 const {
   annotateSourceCoverageReferences,
   buildSourceCoverageCatalog,
-  reconcileMissingSourceCoverage,
+  normalizeSourceCoverageSections,
 } = require("./lib/source-coverage");
 
 function resolveRunMeetingDate(config, now = new Date()) {
@@ -152,7 +152,7 @@ const NON_OVERRIDABLE_V2_CODES = new Set([
   "raw_ai_draft_hash_mismatch",
   "open_status_repo_unavailable",
 ]);
-const SOURCE_COVERAGE_MODE = "required_sections_and_notion_v1";
+const SOURCE_COVERAGE_MODE = "required_sections_notion_advisory_v2";
 
 function hasNonOverridableV2Issue(validation) {
   return Boolean(
@@ -481,22 +481,23 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       catalog
     );
     const expandedAnnotatedSource = expandFactReferences(aiSource, catalog);
-    const sourceCoverageReconciliation = reconcileMissingSourceCoverage(
+    const sourceCoverageNormalization = normalizeSourceCoverageSections(
       countedQuantityRestoredContent,
       expandedAnnotatedSource,
-      coverageCatalog
+      coverageCatalog,
+      catalog
     );
     const meetingDateFact = catalog.facts.find((fact) => fact.type === "meeting_date");
     const workingContent = normalizeOpenStatusAsOfClauses(
-      sourceCoverageReconciliation.content,
+      sourceCoverageNormalization.content,
       meetingDateFact
     );
     writeImmutableArtifact(runPaths.workingDraftPath, workingContent);
     updateRunState(runPaths, attemptId, {
       status: "ai_complete",
-      sourceCoverageReconciliation: {
-        addedSectionIds: sourceCoverageReconciliation.addedSectionIds,
-        addedItemIds: sourceCoverageReconciliation.addedItemIds,
+      sourceCoverageNormalization: {
+        canonicalizedSectionIds: sourceCoverageNormalization.canonicalizedSectionIds,
+        addedSectionMarkerIds: sourceCoverageNormalization.addedSectionMarkerIds,
       },
       sanitizer: {
         inputHash: sha256(generated.rawAiOutput),
