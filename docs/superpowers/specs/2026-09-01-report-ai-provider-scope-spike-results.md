@@ -8,12 +8,14 @@
 - effort: medium
 - 자동 재시도/provider fallback: 없음
 - Redmine update: 없음
-- 실제 모델 호출: 9회 (승인 상한 12회)
+- 실제 모델 호출: 9회 (승인 상한 12회, 완료 응답 기준 수동 집계)
 
 원본 실행 결과:
 
 - 전체/초기 분할: `/home/jhw/ai/opencode/projects/redmine/out/spikes/ai-provider-scope-2026-09-01-v1/comparison.json`
 - 분할 정규화 수정 후: `/home/jhw/ai/opencode/projects/redmine/out/spikes/ai-provider-scope-2026-09-01-v2-project-fix/comparison.json`
+
+두 원본 JSON은 spike schema v1이라 `plannedCalls`와 `actualCalls`가 분리되어 있지 않다. 현재 runner는 schema v2로 두 필드를 run artifact에서 기록하지만, 호출 상한을 넘기지 않기 위해 이 문서 작성 시 모델을 추가 호출하지 않았다. 아래 project 결과는 corrected 6개 전체 비교가 아니라 Sonnet/Codex의 제한된 재실행 결과다.
 
 ## whole 결과
 
@@ -38,7 +40,7 @@
 | Codex gpt-5.6-sol | Wireless Lan 2/3 | ERROR | `fact_subject_mismatch` 3건, fact/section mismatch와 canonical heading 밑줄로 인한 source section 오류 |
 | Claude Opus | 재실행 안 함 | 미평가 | whole이 이미 blocking FAIL이고 호출 상한을 지키기 위해 제외 |
 
-project 모드는 파트 실패 시 뒤 호출을 중단했고, Sonnet은 1회, Codex는 2회만 사용했다. 아직 실제 주간보고 전체를 끝까지 통과한 후보가 없으므로 큰 입력을 위한 파일럿 옵션으로 유지한다.
+project 모드는 파트 실패 시 뒤 호출을 중단했고, Sonnet은 1회, Codex는 2회만 사용했다. Opus/project가 같은 수정본으로 재실행되지 않았으므로 provider 간 project 품질 비교는 미완료다. 아직 실제 주간보고 전체를 끝까지 통과한 후보가 없으므로 큰 입력을 위한 파일럿 옵션으로 유지한다.
 
 ## 권장 운영값
 

@@ -79,15 +79,51 @@ function summarizeIssues(issues = []) {
   return { total: issues.length, bySeverity, byCode };
 }
 
-function readPromptCallCount(result) {
-  const promptPath = result && result.runPaths && result.runPaths.promptInputPath;
-  if (!promptPath || !fs.existsSync(promptPath)) return null;
+function readJsonIfPresent(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return null;
   try {
-    const promptInput = JSON.parse(fs.readFileSync(promptPath, "utf8"));
-    return Number.isInteger(promptInput.callCount) ? promptInput.callCount : null;
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch {
     return null;
   }
+}
+
+function listRunDirectories(outputDir, meetingDateText) {
+  const root = path.join(outputDir, "runs", meetingDateText);
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(root, entry.name));
+}
+
+function selectEvidenceRun(outputDir, meetingDateText, result, previousRuns) {
+  const returnedRunDir = result && result.runPaths && result.runPaths.runDir;
+  if (returnedRunDir && fs.existsSync(returnedRunDir)) return returnedRunDir;
+  const candidates = listRunDirectories(outputDir, meetingDateText)
+    .filter((runDir) => !previousRuns.has(runDir));
+  return candidates.sort((left, right) => {
+    const leftState = readJsonIfPresent(path.join(left, "state.json"));
+    const rightState = readJsonIfPresent(path.join(right, "state.json"));
+    return String(rightState?.startedAt || "").localeCompare(String(leftState?.startedAt || ""));
+  })[0] || null;
+}
+
+function readModelCallEvidence(outputDir, meetingDateText, entry, result, previousRuns) {
+  const runDir = selectEvidenceRun(outputDir, meetingDateText, result, previousRuns);
+  if (!runDir) return { plannedCalls: null, actualCalls: 0, callEvidenceRunDir: null };
+  const promptInput = readJsonIfPresent(path.join(runDir, "prompt-input.json"));
+  const state = readJsonIfPresent(path.join(runDir, "state.json"));
+  const plannedCalls = Number.isInteger(promptInput?.callCount) ? promptInput.callCount : null;
+  let actualCalls = 0;
+  if (entry.scope === "project") {
+    const stateCalls = Array.isArray(state?.aiParts) ? state.aiParts.length : 0;
+    const artifactCalls = fs.readdirSync(runDir)
+      .filter((name) => /^draft\.ai\.part\.\d+\.annotated\.md$/.test(name)).length;
+    actualCalls = Math.max(stateCalls, artifactCalls);
+  } else if (state?.rawAiDraftHash || fs.existsSync(path.join(runDir, "draft.ai.annotated.md"))) {
+    actualCalls = 1;
+  }
+  return { plannedCalls, actualCalls, callEvidenceRunDir: runDir };
 }
 
 function findAnalyzableReport(result) {
@@ -156,9 +192,17 @@ async function runComparison(options) {
       timeoutMs,
     });
     const startedAt = now();
+    const previousRuns = new Set(listRunDirectories(config.env.outputDir, meetingDateText));
     logger(`[spike] start ${entry.id}`);
     try {
       const generated = await runGenerateFn(config, meetingDate);
+      const callEvidence = readModelCallEvidence(
+        config.env.outputDir,
+        meetingDateText,
+        entry,
+        generated,
+        previousRuns
+      );
       const reportPath = findAnalyzableReport(generated);
       const analysis = reportPath
         ? analyzeReport(fs.readFileSync(reportPath, "utf8"))
@@ -169,19 +213,26 @@ async function runComparison(options) {
         status: validation.status || "UNKNOWN",
         publishable: validation.publishable === true,
         elapsedMs: now() - startedAt,
-        callCount: readPromptCallCount(generated),
+        ...callEvidence,
         reportPath,
         validationIssues: summarizeIssues(validation.issues),
         sourceCoverage: validation.sourceCoverage || null,
         ...analysis,
       });
     } catch (error) {
+      const callEvidence = readModelCallEvidence(
+        config.env.outputDir,
+        meetingDateText,
+        entry,
+        null,
+        previousRuns
+      );
       results.push({
         ...entry,
         status: "ERROR",
         publishable: false,
         elapsedMs: now() - startedAt,
-        callCount: null,
+        ...callEvidence,
         reportPath: null,
         sourceCoverage: null,
         ...analyzeReport(""),
@@ -195,7 +246,7 @@ async function runComparison(options) {
   }
 
   const summary = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     createdAt: new Date().toISOString(),
     meetingDate: meetingDateText,
     snapshotPath,

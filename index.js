@@ -535,6 +535,9 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
           rawAiDraftHash: sha256(rawOutput),
         });
         updateRunState(runPaths, attemptId, { aiParts: [...aiPartArtifacts] });
+        writeOwnedOrThrow(generationStatePath, attemptId, {
+          aiParts: [...aiPartArtifacts],
+        });
       },
       prepareProjectOutput: ({ content }) => prepareV2AnnotatedContent(
         content,

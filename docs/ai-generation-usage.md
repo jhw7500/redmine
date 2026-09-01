@@ -213,4 +213,4 @@ node scripts/ai-provider-scope-spike.js \
   --depth 3 --effort medium --timeout-ms 900000
 ```
 
-결과는 `<output-dir>/comparison.json`에 검증 상태, 이슈 집계, source coverage, 줄·불릿·leaf 중복, 소요시간과 실제 호출 수로 기록된다.
+결과는 `<output-dir>/comparison.json`에 검증 상태, 이슈 집계, source coverage, 줄·불릿·leaf 중복, 소요시간과 호출 증거를 기록한다. `plannedCalls`는 해당 run의 `prompt-input.json`에 기록된 계획 호출 수이고, `actualCalls`는 `draft.ai.annotated.md` 또는 `draft.ai.part.NNN.annotated.md`로 완료 응답이 보존된 수다. timeout처럼 응답 산출물이 없는 호출은 `actualCalls`에 포함되지 않는다.

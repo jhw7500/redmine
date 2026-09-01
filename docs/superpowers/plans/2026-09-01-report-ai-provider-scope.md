@@ -214,7 +214,7 @@ Expected: script export 부재로 FAIL
 
 - [ ] **Step 3: 의존성 없는 비교 runner 구현**
 
-기본 matrix는 Sonnet/Opus/GPT-5.6 Sol × whole/project다. 각 조합은 독립 output dir와 snapshot을 사용하며 `runGenerate`만 호출하고 `update`는 호출하지 않는다. 결과 JSON에 status, publishable, issue codes, lines, bullets, normalized exact duplicate groups, elapsedMs, plannedCalls를 기록한다.
+기본 matrix는 Sonnet/Opus/GPT-5.6 Sol × whole/project다. 각 조합은 독립 output dir와 snapshot을 사용하며 `runGenerate`만 호출하고 `update`는 호출하지 않는다. 결과 JSON에 status, publishable, issue codes, lines, bullets, normalized exact duplicate groups, elapsedMs, `plannedCalls`, `actualCalls`를 기록한다.
 
 - [ ] **Step 4: Spike 단위 테스트와 전체 회귀 테스트 통과 확인**
 
@@ -224,6 +224,10 @@ Expected: 0 failures
 
 - [ ] **Step 5: 2026-08-26 depth3 실제 비교 실행**
 
-Run: `node scripts/ai-provider-scope-spike.js --snapshot /home/jhw/ai/opencode/projects/redmine/out/report-2026-08-26.snapshot.json --depth 3 --effort medium`
+Run: `node scripts/ai-provider-scope-spike.js --snapshot /home/jhw/ai/opencode/projects/redmine/out/report-2026-08-26.snapshot.json --meeting-date 2026-08-26 --depth 3 --effort medium`
 
 Expected: Redmine 요청 없이 최대 12회 호출 후 temp comparison path 출력. 인증 또는 모델 접근 실패 조합은 실패 코드와 경과 시간을 남기고 다른 조합은 계속한다.
+
+#### 실행 변경 기록 (2026-09-01)
+
+초기 6개 실행의 project 결과는 부분 검증 정규화 결함 때문에 비교 근거에서 제외했다. 수정 후 원래 승인된 12회 상한 안에서 Sonnet/project와 Codex/project만 재실행했으며, Opus/project는 재실행하지 않았다. 따라서 이번 spike는 corrected 6-entry acceptance를 충족하지 않는 제한된 파일럿 증거이며 project 후보 간 우열 결정에 사용하지 않는다. 추가 전체 matrix는 별도 모델 호출 승인을 받은 뒤 schema v2 `plannedCalls`/`actualCalls` 증거로 실행한다.
