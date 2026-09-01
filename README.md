@@ -3,6 +3,7 @@ Redmine weekly meeting automation (조현우 section) - API
 Setup
 - Uses Node 18+ (built-in fetch)
 - Set credentials via env vars.
+- AI provider/model, `whole|project` 분할과 운영 예시는 [주간보고 AI 생성 사용 가이드](docs/ai-generation-usage.md) 참조.
 
 Required env vars
 - `REDMINE_API_KEY` (`MODE=update`에서만 필수)
@@ -36,11 +37,15 @@ Optional env vars
 - `PRESENTATION_NOTE_THRESHOLD` (자동 발표노트 후보 점수, 기본 5)
 - `LEADER_HIGHLIGHT` (default: 0 — 팀장 회의 보고용 중요 항목 밑줄(`<u>`) 강조. 1=사용. repo-config.json `reportFilter.leaderHighlight.enabled`보다 우선)
 - `LEADER_HIGHLIGHT_MAX` (default: 0 = 무제한 — 밑줄 최대 줄 수. N>0이면 AI에 상한 지시. repo-config.json `reportFilter.leaderHighlight.maxLines`보다 우선)
-- `AI_SUMMARIZE` (`1`이면 generate 단계에서 Claude 요약 사용. 미설정 시 원본 초안 사용)
-- `AI_MODEL` (default: `sonnet` — 주간보고 전용 모델. 사용자 전역 모델을 상속하지 않음)
+- `AI_SUMMARIZE` (`1`이면 generate 단계에서 AI 요약 사용. 미설정 시 원본 초안 사용)
+- `AI_PROVIDER` (`claude|codex`, default: `claude` — Codex는 품질 비교 후 선택하는 후보이며 자동 fallback하지 않음)
+- `AI_MODEL` (provider별 default: Claude `sonnet`, Codex `gpt-5.6-sol` — 주간보고 전용 모델. 사용자 전역 모델을 상속하지 않음)
 - `AI_EFFORT` (default: `low`; `low|medium|high|xhigh|max`)
-- `AI_MAX_INPUT_CHARS` (default: `100000` — Claude에 전달할 전체 prompt 문자 수 상한. 초과 시 호출 전 중단)
-- `AI_TIMEOUT_MS` (default: `300000` — Claude 단일 호출 timeout, 양의 정수)
+- `AI_GENERATION_SCOPE` (`whole|project`, default: `whole` — `whole`은 전체 보고서 1회 호출, `project`는 내용이 있는 PIM/Wireless Lan/ETC를 순서대로 호출한 뒤 병합)
+- `CLAUDE_CLI` (default: `claude`)
+- `CODEX_CLI` (default: `codex`)
+- `AI_MAX_INPUT_CHARS` (default: `100000` — AI에 전달할 호출별 prompt 문자 수 상한. 초과 시 호출 전 중단)
+- `AI_TIMEOUT_MS` (default: `300000` — AI 단일 호출 timeout, 양의 정수)
 - `AI_MAX_BUDGET_USD` (선택 — 설정 시 Claude CLI `--max-budget-usd`로 전달, 양수)
 - `AI_EN_PATH` (default: /home/jhw/ai/codex/redmine-auto/templates/ai-en.md)
 - `AI_KO_PATH` (default: /home/jhw/ai/codex/redmine-auto/templates/ai-ko.md)
@@ -65,6 +70,8 @@ Notes
 Run
 - Collect once: `MODE=collect MEETING_DATE=2026-07-15 ./run-report-env.sh`
 - Draft only: `MODE=generate REPORT_DEPTH=3 MEETING_DATE=2026-07-15 ./run-report-env.sh`
+- Project-split draft: `MODE=generate AI_SUMMARIZE=1 AI_GENERATION_SCOPE=project REPORT_DEPTH=3 MEETING_DATE=2026-07-15 ./run-report-env.sh`
+- Codex candidate draft: `MODE=generate AI_SUMMARIZE=1 AI_PROVIDER=codex AI_GENERATION_SCOPE=whole REPORT_DEPTH=3 MEETING_DATE=2026-07-15 ./run-report-env.sh`
 - Revalidate a failed AI run without Claude: `MODE=revalidate RUN_ID=<uuid> MEETING_DATE=2026-07-15 ./run-report-env.sh`
 - Update from validated file: `MODE=update REPORT_DEPTH=3 MEETING_DATE=2026-07-15 ./run-report-env.sh`
 - Preview expired run cleanup: `MODE=prune ./run-report-env.sh`
@@ -77,8 +84,17 @@ Mode boundaries
 - `revalidate`: 지정한 실패 schema v2 run의 working draft를 Claude 호출 없이 재검증. Redmine 쓰기 없음.
 - `update`: 수집/AI 호출 없음. snapshot과 depth 파일을 재검증한 후 Redmine 반영.
 
-AI 요약은 호출당 1회로 고정하며 `--safe-mode --tools "" --no-session-persistence`로 실행한다.
-따라서 프로젝트 plugin·hook·MCP와 사용자 전역 모델/effort를 불러오지 않는다. AI가 활성화된
+`AI_GENERATION_SCOPE=whole`은 기존처럼 보고서 전체를 한 번 호출한다. `project`는 내용이 있는
+PIM → Wireless Lan → ETC만 각각 순차 호출하며, 한 파트의 차단 검증이 실패하면 뒤의 호출을
+중단한다. 파트 결과는 설정 순서로 결정적으로 병합하고 기존 전체 schema v2 검증을 다시 통과해야 한다.
+평소 작업량에는 기본값 `whole`을 유지하고, 입력이 큰 주에만 `project`를 선택한다.
+`project`는 파트별 사실-대상·section 검증에 더 민감하므로 현재는 큰 입력을 위한 파일럿 옵션이다.
+파트 실패 시 해당 원문과 오류를 보존하고 뒤 파트는 호출하지 않는다.
+
+Claude는 `--safe-mode --tools "" --no-session-persistence`, Codex는 격리된 임시 작업 디렉터리와
+`--ephemeral --ignore-user-config --ignore-rules --sandbox read-only`로 실행한다. 두 provider 모두
+프로젝트 plugin·hook·MCP와 사용자 전역 model/effort를 불러오지 않는다. provider 자동 fallback과
+실패 재호출은 하지 않는다. AI가 활성화된
 상태에서 입력 상한, quota, timeout, CLI 실행 또는 빈 응답 오류가 발생하면 `generate`를 실패시키고
 raw 초안으로 대체하지 않는다. `update`는 기존처럼 별도 실행이지만 실패한 generate 뒤에는 게시 단계로 진행하지 않는다.
 AI-enabled schema v2 generate는 시도별 자료를 `out/runs/<date>/<run-id>/`에 저장한다.
@@ -121,7 +137,8 @@ Artifacts
 - `out/runs/YYYY-MM-DD/<run-id>/fact-catalog.json`: 원본에서 추출한 exact-copy 사실 catalog
 - `out/runs/YYYY-MM-DD/<run-id>/source-coverage.json`: 필수 source coverage catalog. 내용이 있는 설정 기반 section과 모든 `[Notion]` 입력 항목의 canonical path, ID, `coverageCatalogHash`를 보관
 - `out/runs/YYYY-MM-DD/<run-id>/prompt-input.json`: snapshot/catalog/prompt/model과 fact input mode 입력 증거
-- `out/runs/YYYY-MM-DD/<run-id>/draft.ai.annotated.md`: bare fact reference가 포함될 수 있는 변경 금지 Claude 원본 출력
+- `out/runs/YYYY-MM-DD/<run-id>/draft.ai.annotated.md`: bare fact reference가 포함될 수 있는 변경 금지 AI 원본 출력
+- `out/runs/YYYY-MM-DD/<run-id>/draft.ai.part.NNN.annotated.md`: `project` 모드의 파트별 변경 금지 AI 원본 출력. 중간 실패 시에도 완료된 파트까지 보존
 - `out/runs/YYYY-MM-DD/<run-id>/draft.working.annotated.md`: full marker로 확장된 실패 run 수동 복구 대상
 - `out/runs/YYYY-MM-DD/<run-id>/validation.NNN.json`: 덮어쓰지 않고 추가되는 검증 revision
 - `out/runs/YYYY-MM-DD/<run-id>/report.clean.md`: marker가 제거된 검증 성공 보고서

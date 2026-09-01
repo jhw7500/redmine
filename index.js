@@ -62,6 +62,7 @@ const {
 } = require("./lib/publisher");
 const { stripAstralChars } = require("./lib/text-normalization");
 const { validateV2ReportContract } = require("./lib/report-contract");
+const { buildGenerationPlan } = require("./lib/report-generation-plan");
 const {
   annotateSourceCoverageReferences,
   buildSourceCoverageCatalog,
@@ -365,6 +366,41 @@ function markRecoverableRunFailure(runPaths, generationStatePath, attemptId, err
   });
 }
 
+function prepareV2AnnotatedContent(
+  content,
+  aiSource,
+  catalog,
+  coverageCatalog,
+  meetingDateFact
+) {
+  const expandedContent = expandFactReferences(content, catalog);
+  const identifierRestoredContent = restoreUnmarkedIdentifierReferences(
+    expandedContent,
+    catalog,
+    coverageCatalog.knownPaths.length > 0
+      ? { knownPaths: coverageCatalog.knownPaths }
+      : {}
+  );
+  const countedQuantityRestoredContent = restoreUnmarkedCountedQuantityReferences(
+    identifierRestoredContent,
+    catalog
+  );
+  const expandedAnnotatedSource = expandFactReferences(aiSource, catalog);
+  const sourceCoverageNormalization = normalizeSourceCoverageSections(
+    countedQuantityRestoredContent,
+    expandedAnnotatedSource,
+    coverageCatalog,
+    catalog
+  );
+  return {
+    content: normalizeOpenStatusAsOfClauses(
+      sourceCoverageNormalization.content,
+      meetingDateFact
+    ),
+    sourceCoverageNormalization,
+  };
+}
+
 async function runGenerateV2(config, meetingDate, dependencies = {}) {
   runAutomaticPrune(config, dependencies);
   const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
@@ -388,6 +424,7 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
   let aiComplete = false;
   let promptInputHash = null;
   let rawAiDraftHash = null;
+  const aiPartArtifacts = [];
 
   withGenerationStateLock(generationStatePath, () => {
     writeJsonAtomic(generationStatePath, { ...generationStateBase, status: "running" });
@@ -410,6 +447,7 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       raw: meetingDateText,
       subject: "meeting date",
     }], { knownPaths: coverageCatalog.knownPaths });
+    const meetingDateFact = catalog.facts.find((fact) => fact.type === "meeting_date");
     const factInputMode = "inline_refs";
     const annotateFacts = dependencies.annotateFactReferences || annotateFactReferences;
     const annotateCoverage = dependencies.annotateSourceCoverageReferences
@@ -432,25 +470,43 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
     updateRunState(runPaths, attemptId, { catalogHash: catalog.catalogHash });
     writeOwnedOrThrow(generationStatePath, attemptId, { catalogHash: catalog.catalogHash });
 
-    const prompt = buildAiPrompt(aiSource, config, meetingDate, {
+    const promptOptions = {
       factCatalog: catalog,
       factInputMode,
       coverageCatalog,
       sourceCoverageMode,
-    });
-    const serializedPromptInput = JSON.stringify({
+    };
+    const generationPlan = buildGenerationPlan(
+      aiSource,
+      config,
+      meetingDate,
+      promptOptions,
+      buildAiPrompt
+    );
+    const promptInput = {
       snapshotPath,
       snapshotHash: snapshot.contentHash,
       catalogHash: catalog.catalogHash,
       factInputMode,
       sourceCoverageMode,
       coverageCatalogHash: coverageCatalog.coverageCatalogHash,
-      promptHash: sha256(prompt),
+      promptHash: generationPlan.promptHash,
+      provider: config.env.aiProvider || "claude",
       model: config.env.aiModel,
       effort: config.env.aiEffort,
-      promptLength: prompt.length,
+      generationScope: generationPlan.scope,
+      callCount: generationPlan.calls.length,
+      promptLength: generationPlan.calls.reduce((total, call) => total + call.promptLength, 0),
       timeoutMs: config.env.aiTimeoutMs,
-    }, null, 2) + "\n";
+      ...(generationPlan.scope === "project" ? {
+        calls: generationPlan.calls.map(({ id, promptHash, promptLength }) => ({
+          id,
+          promptHash,
+          promptLength,
+        })),
+      } : {}),
+    };
+    const serializedPromptInput = JSON.stringify(promptInput, null, 2) + "\n";
     promptInputHash = sha256(serializedPromptInput);
     writeImmutableArtifact(runPaths.promptInputPath, serializedPromptInput);
     updateRunState(runPaths, attemptId, { promptInputHash });
@@ -458,40 +514,45 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
 
     aiStarted = true;
     const generated = await generateContent(config, meetingDate, aiSource, {
-      factCatalog: catalog,
-      factInputMode,
-      prompt,
+      ...promptOptions,
+      generationPlan,
       onRawAiOutput: (rawAiOutput) => {
         writeImmutableArtifact(runPaths.aiDraftPath, rawAiOutput);
         rawAiDraftHash = sha256(rawAiOutput);
         updateRunState(runPaths, attemptId, { rawAiDraftHash });
         writeOwnedOrThrow(generationStatePath, attemptId, { rawAiDraftHash });
       },
+      onRawAiPartOutput: ({ id, index, rawOutput }) => {
+        const partPath = path.join(
+          runPaths.runDir,
+          `draft.ai.part.${String(index).padStart(3, "0")}.annotated.md`
+        );
+        writeImmutableArtifact(partPath, rawOutput);
+        aiPartArtifacts.push({
+          id,
+          index,
+          path: partPath,
+          rawAiDraftHash: sha256(rawOutput),
+        });
+        updateRunState(runPaths, attemptId, { aiParts: [...aiPartArtifacts] });
+      },
+      prepareProjectOutput: ({ content }) => prepareV2AnnotatedContent(
+        content,
+        aiSource,
+        catalog,
+        coverageCatalog,
+        meetingDateFact
+      ).content,
     });
-    const expandedContent = expandFactReferences(generated.content, catalog);
-    const identifierRestoredContent = restoreUnmarkedIdentifierReferences(
-      expandedContent,
+    const preparedContent = prepareV2AnnotatedContent(
+      generated.content,
+      aiSource,
       catalog,
-      coverageCatalog.knownPaths.length > 0
-        ? { knownPaths: coverageCatalog.knownPaths }
-        : {}
-    );
-    const countedQuantityRestoredContent = restoreUnmarkedCountedQuantityReferences(
-      identifierRestoredContent,
-      catalog
-    );
-    const expandedAnnotatedSource = expandFactReferences(aiSource, catalog);
-    const sourceCoverageNormalization = normalizeSourceCoverageSections(
-      countedQuantityRestoredContent,
-      expandedAnnotatedSource,
       coverageCatalog,
-      catalog
-    );
-    const meetingDateFact = catalog.facts.find((fact) => fact.type === "meeting_date");
-    const workingContent = normalizeOpenStatusAsOfClauses(
-      sourceCoverageNormalization.content,
       meetingDateFact
     );
+    const { sourceCoverageNormalization } = preparedContent;
+    const workingContent = preparedContent.content;
     writeImmutableArtifact(runPaths.workingDraftPath, workingContent);
     updateRunState(runPaths, attemptId, {
       status: "ai_complete",
@@ -592,6 +653,12 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
           status: "ai_failed",
           failedAt: new Date().toISOString(),
           errorCode: error && error.code ? error.code : "GENERATE_FAILED",
+          ...(error && error.partId ? {
+            partFailure: {
+              partId: error.partId,
+              issues: Array.isArray(error.issues) ? error.issues : [],
+            },
+          } : {}),
         });
       } catch (stateError) {
         if (!/transition|attempt/i.test(stateError.message)) throw stateError;
