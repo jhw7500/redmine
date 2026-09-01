@@ -1,0 +1,13 @@
+{
+  "categories": {
+    "pimBsp": {"label":"iMX8MP BSP","parent":"PIM","templateKey":"PIM_BSP_KO"},
+    "wlanBsp": {"label":"iMX93 BSP","parent":"Wireless Lan","templateKey":"WLAN_BSP_KO"},
+    "etc": {"label":null,"parent":"ETC","templateKey":"ETC_KO"}
+  },
+  "autoContent": {
+    "{{PIM_BSP_KO}}":"    - [Notion] IIM-42652 내장 IMU 드라이버 브링업\n    - [Notion] Sterling60 규제 DB 복구",
+    "{{WLAN_BSP_KO}}":"    - [Notion] wlan-package 다보드 부팅 SSoT",
+    "{{ETC_KO}}":"  - (변경 없음)"
+  },
+  "rawContent":"#### <span style=\"color:blue\">조현우</span>\n\n- PIM\n  - iMX8MP BSP\n    - [Notion] IIM-42652 내장 IMU 드라이버 브링업\n    - [Notion] Sterling60 규제 DB 복구\n\n- Wireless Lan\n  - iMX93 BSP\n    - [Notion] wlan-package 다보드 부팅 SSoT\n\n- ETC\n  - (변경 없음)\n"
+}

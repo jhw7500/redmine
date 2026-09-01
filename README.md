@@ -119,11 +119,23 @@ Artifacts
 - `out/jo-hyunwoo-YYYY-MM-DD.depthN.published.md`: Redmine에 실제 반영한 최종 조현우 섹션
 - `out/runs/YYYY-MM-DD/<run-id>/state.json`: schema v2 시도 상태와 최신 validation revision 소유권
 - `out/runs/YYYY-MM-DD/<run-id>/fact-catalog.json`: 원본에서 추출한 exact-copy 사실 catalog
+- `out/runs/YYYY-MM-DD/<run-id>/source-coverage.json`: 필수 source coverage catalog. 내용이 있는 설정 기반 section과 모든 `[Notion]` 입력 항목의 canonical path, ID, `coverageCatalogHash`를 보관
 - `out/runs/YYYY-MM-DD/<run-id>/prompt-input.json`: snapshot/catalog/prompt/model과 fact input mode 입력 증거
 - `out/runs/YYYY-MM-DD/<run-id>/draft.ai.annotated.md`: bare fact reference가 포함될 수 있는 변경 금지 Claude 원본 출력
 - `out/runs/YYYY-MM-DD/<run-id>/draft.working.annotated.md`: full marker로 확장된 실패 run 수동 복구 대상
 - `out/runs/YYYY-MM-DD/<run-id>/validation.NNN.json`: 덮어쓰지 않고 추가되는 검증 revision
 - `out/runs/YYYY-MM-DD/<run-id>/report.clean.md`: marker가 제거된 검증 성공 보고서
+
+Source coverage contract (schema v2)
+- `source-coverage.json`의 `C0001` 같은 `C` marker는 내용이 있는 설정 기반 **section heading**을 뜻한다. 해당 heading은 catalog의 canonical category path에 정확히 한 번 존재해야 한다.
+- `N0001` 같은 `N` marker는 입력의 각 `[Notion]` bullet을 뜻한다. 여러 항목을 한 bullet로 요약할 수는 있지만, 보고 기간에 수집된 모든 Notion 항목은 각 ID가 정확히 한 번, 원래 canonical path 안에 남아야 한다.
+- 즉, populated configured section과 모든 Notion 항목은 선택 사항이 아니다. 누락·중복·변조·다른 category로의 이동은 coverage validation failure이며 publishable이 아니다.
+- coverage 적용 run은 `state.json`, 전역 `*.generation.json`, `prompt-input.json`, `validation.NNN.json`에 `sourceCoverageMode: "required_sections_and_notion_v1"`와 동일한 `coverageCatalogHash`를 기록한다. revalidate와 update는 이 값과 `source-coverage.json`의 hash 소유권을 대조한다.
+- coverage validation이 실패하면 같은 generate run에서 Claude를 다시 호출하지 않는다. `draft.ai.annotated.md`는 immutable 원본으로 남기고, 운영자는 **`draft.working.annotated.md`만** 수동 수정한 다음 `MODE=revalidate RUN_ID=<uuid>`를 실행한다.
+- coverage catalog/hash/validation ownership이 없거나 일치하지 않으면 `MODE=update`는 Redmine API 요청 전에 실패한다. 이 coverage-specific failure는 `VALIDATION_OVERRIDE=1`로 우회할 수 없다.
+
+Pilot and publication approval
+- 로컬 fake CLI/server 회귀 테스트는 실제 Claude 호출이나 Redmine 게시가 아니다. 실제 Claude pilot과 실제 Redmine publication은 각각 별도의 명시적 승인을 받은 뒤에만 실행한다.
 
 Current cron flow (Wednesday, Asia/Seoul)
 - 06:05 `collect`

@@ -61,6 +61,11 @@ const {
   update,
 } = require("./lib/publisher");
 const { stripAstralChars } = require("./lib/text-normalization");
+const { validateV2ReportContract } = require("./lib/report-contract");
+const {
+  annotateSourceCoverageReferences,
+  buildSourceCoverageCatalog,
+} = require("./lib/source-coverage");
 
 function resolveRunMeetingDate(config, now = new Date()) {
   let meetingDate = resolveMeetingDate(config);
@@ -136,6 +141,7 @@ const NON_OVERRIDABLE_V2_CODES = new Set([
   "unmarked_protected_fact",
   "snapshot_hash_mismatch",
   "catalog_hash_mismatch",
+  "coverage_catalog_hash_mismatch",
   "annotated_draft_hash_mismatch",
   "clean_report_hash_mismatch",
   "validation_path_mismatch",
@@ -145,6 +151,7 @@ const NON_OVERRIDABLE_V2_CODES = new Set([
   "raw_ai_draft_hash_mismatch",
   "open_status_repo_unavailable",
 ]);
+const SOURCE_COVERAGE_MODE = "required_sections_and_notion_v1";
 
 function hasNonOverridableV2Issue(validation) {
   return Boolean(
@@ -386,14 +393,28 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
   });
 
   try {
+    const sourceCoverageMode = SOURCE_COVERAGE_MODE;
+    const buildCoverage = dependencies.buildSourceCoverageCatalog || buildSourceCoverageCatalog;
+    const coverageCatalog = buildCoverage(snapshot, config.categories);
+    Object.assign(generationStateBase, {
+      sourceCoverageMode,
+      coverageCatalogHash: coverageCatalog.coverageCatalogHash,
+    });
+    writeOwnedOrThrow(generationStatePath, attemptId, {
+      sourceCoverageMode,
+      coverageCatalogHash: coverageCatalog.coverageCatalogHash,
+    });
     const catalog = buildFactCatalog(snapshot.rawContent, [{
       type: "meeting_date",
       raw: meetingDateText,
       subject: "meeting date",
-    }]);
+    }], { knownPaths: coverageCatalog.knownPaths });
     const factInputMode = "inline_refs";
-    const annotateSource = dependencies.annotateFactReferences || annotateFactReferences;
-    const aiSource = annotateSource(snapshot.rawContent, catalog);
+    const annotateFacts = dependencies.annotateFactReferences || annotateFactReferences;
+    const annotateCoverage = dependencies.annotateSourceCoverageReferences
+      || annotateSourceCoverageReferences;
+    const factAnnotatedSource = annotateFacts(snapshot.rawContent, catalog);
+    const aiSource = annotateCoverage(factAnnotatedSource, coverageCatalog);
 
     initializeReportRun(runPaths, { ...generationStateBase, status: "running" });
     runInitialized = true;
@@ -403,18 +424,26 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       runPaths.catalogPath,
       JSON.stringify(catalog, null, 2) + "\n"
     );
+    writeImmutableArtifact(
+      runPaths.coverageCatalogPath,
+      JSON.stringify(coverageCatalog, null, 2) + "\n"
+    );
     updateRunState(runPaths, attemptId, { catalogHash: catalog.catalogHash });
     writeOwnedOrThrow(generationStatePath, attemptId, { catalogHash: catalog.catalogHash });
 
     const prompt = buildAiPrompt(aiSource, config, meetingDate, {
       factCatalog: catalog,
       factInputMode,
+      coverageCatalog,
+      sourceCoverageMode,
     });
     const serializedPromptInput = JSON.stringify({
       snapshotPath,
       snapshotHash: snapshot.contentHash,
       catalogHash: catalog.catalogHash,
       factInputMode,
+      sourceCoverageMode,
+      coverageCatalogHash: coverageCatalog.coverageCatalogHash,
       promptHash: sha256(prompt),
       model: config.env.aiModel,
       effort: config.env.aiEffort,
@@ -439,7 +468,13 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       },
     });
     const expandedContent = expandFactReferences(generated.content, catalog);
-    const identifierRestoredContent = restoreUnmarkedIdentifierReferences(expandedContent, catalog);
+    const identifierRestoredContent = restoreUnmarkedIdentifierReferences(
+      expandedContent,
+      catalog,
+      coverageCatalog.knownPaths.length > 0
+        ? { knownPaths: coverageCatalog.knownPaths }
+        : {}
+    );
     const countedQuantityRestoredContent = restoreUnmarkedCountedQuantityReferences(
       identifierRestoredContent,
       catalog
@@ -460,10 +495,11 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
     });
     aiComplete = true;
 
-    const result = validateAnnotatedReport(
+    const result = validateV2ReportContract(
       snapshot.rawContent,
       workingContent,
       catalog,
+      coverageCatalog,
       {
         attemptId,
         meetingDate: meetingDateText,
@@ -473,6 +509,8 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
         sectionHeader: config.env.sectionHeader,
         repos: config.repos,
         openIssueVerifierOptions: resolveOpenIssueVerifierOptions(config),
+        knownPaths: coverageCatalog.knownPaths,
+        sourceCoverageMode,
       }
     );
     result.validation.publishable = isPublishable(result.validation);
@@ -562,6 +600,63 @@ async function runGenerate(config, meetingDate) {
     : runGenerateV1(config, meetingDate);
 }
 
+function sourceCoverageOwnershipError(message, cause) {
+  const error = new Error(`source coverage ownership mismatch: ${message}`, cause
+    ? { cause }
+    : undefined);
+  error.code = "SOURCE_COVERAGE_OWNERSHIP_MISMATCH";
+  return error;
+}
+
+function readRevalidationPromptInput(promptInputPath) {
+  try {
+    return JSON.parse(fs.readFileSync(promptInputPath, "utf8"));
+  } catch (error) {
+    throw sourceCoverageOwnershipError(
+      "prompt-input metadata is missing or unreadable",
+      error
+    );
+  }
+}
+
+function resolveRevalidationCoverageOwnership(run, generationState) {
+  const promptInput = readRevalidationPromptInput(run.paths.promptInputPath);
+  const owners = [run.state, generationState, promptInput];
+  const fieldsPresent = owners.flatMap((owner) => [
+    Object.prototype.hasOwnProperty.call(owner, "sourceCoverageMode"),
+    Object.prototype.hasOwnProperty.call(owner, "coverageCatalogHash"),
+  ]);
+  const coverageArtifactExists = fs.existsSync(run.paths.coverageCatalogPath);
+  const hasAnyCoverageEvidence = fieldsPresent.some(Boolean) || coverageArtifactExists;
+
+  if (!hasAnyCoverageEvidence) {
+    return { enabled: false, coverageCatalog: null };
+  }
+  if (
+    !fieldsPresent.every(Boolean)
+    || !coverageArtifactExists
+    || !run.coverageCatalog
+  ) {
+    throw sourceCoverageOwnershipError("coverage evidence is only partially present");
+  }
+
+  const modes = owners.map((owner) => owner.sourceCoverageMode);
+  if (!modes.every((mode) => mode === SOURCE_COVERAGE_MODE)) {
+    throw sourceCoverageOwnershipError("coverage mode does not match the required mode");
+  }
+  const hashes = [
+    ...owners.map((owner) => owner.coverageCatalogHash),
+    run.coverageCatalog.coverageCatalogHash,
+  ];
+  if (
+    hashes.some((hash) => typeof hash !== "string" || hash.length === 0)
+    || !hashes.every((hash) => hash === hashes[0])
+  ) {
+    throw sourceCoverageOwnershipError("coverage catalog hash does not match");
+  }
+  return { enabled: true, coverageCatalog: run.coverageCatalog };
+}
+
 async function runRevalidate(config, meetingDate) {
   const meetingDateText = formatDate(meetingDate);
   const runPaths = resolveReportRunPaths(
@@ -575,18 +670,22 @@ async function runRevalidate(config, meetingDate) {
   return withRunValidationLock(runPaths, () => {
     const run = loadResolvedReportRun(runPaths, config.env.runId);
     const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
-    assertGenerationStateOwned(generationStatePath, run.state.attemptId);
+    const generationState = assertGenerationStateOwned(
+      generationStatePath,
+      run.state.attemptId
+    );
+    const coverageOwnership = resolveRevalidationCoverageOwnership(run, generationState);
     assertRunInputs(run.state, snapshot, run.catalog, {
       attemptId: config.env.runId,
       meetingDate: meetingDateText,
       reportDepth: Number(config.env.reportDepth),
-    });
+    }, coverageOwnership.coverageCatalog);
     if (run.state.status !== "validation_failed") {
       throw new Error(`revalidate requires validation_failed state, got ${run.state.status}`);
     }
 
     const annotated = fs.readFileSync(run.paths.workingDraftPath, "utf8");
-    const result = validateAnnotatedReport(snapshot.rawContent, annotated, run.catalog, {
+    const validationOptions = {
       attemptId: run.state.attemptId,
       meetingDate: meetingDateText,
       reportDepth: Number(config.env.reportDepth),
@@ -595,8 +694,27 @@ async function runRevalidate(config, meetingDate) {
       sectionHeader: config.env.sectionHeader,
       repos: config.repos,
       openIssueVerifierOptions: resolveOpenIssueVerifierOptions(config),
-    });
+    };
+    const result = coverageOwnership.enabled
+      ? validateV2ReportContract(
+        snapshot.rawContent,
+        annotated,
+        run.catalog,
+        coverageOwnership.coverageCatalog,
+        {
+          ...validationOptions,
+          knownPaths: coverageOwnership.coverageCatalog.knownPaths,
+          sourceCoverageMode: SOURCE_COVERAGE_MODE,
+        }
+      )
+      : validateAnnotatedReport(
+        snapshot.rawContent,
+        annotated,
+        run.catalog,
+        validationOptions
+      );
     const publishable = isPublishable(result.validation);
+    result.validation.publishable = publishable;
     if (publishable) {
       result.validation.cleanReportHash = sha256(result.cleanContent);
     }
@@ -718,6 +836,9 @@ function mapRunEvidenceError(error) {
   if (/snapshot hash/i.test(message)) {
     return evidenceError("snapshot_hash_mismatch", message, error);
   }
+  if (/coverage catalog/i.test(message)) {
+    return evidenceError("coverage_catalog_hash_mismatch", message, error);
+  }
   if (/catalog hash/i.test(message)) {
     return evidenceError("catalog_hash_mismatch", message, error);
   }
@@ -725,6 +846,33 @@ function mapRunEvidenceError(error) {
     return evidenceError("attempt_ownership_mismatch", message, error);
   }
   return evidenceError("run_path_mismatch", message, error);
+}
+
+function assertV2CoveragePublishEvidence({ state, current, run, validation, promptInput }) {
+  const owners = [state, current, run.state, validation, promptInput];
+  const coverageEnabled = owners.some(
+    (owner) => Object.prototype.hasOwnProperty.call(owner, "sourceCoverageMode")
+      || Object.prototype.hasOwnProperty.call(owner, "coverageCatalogHash")
+  ) || fs.existsSync(run.paths.coverageCatalogPath);
+
+  if (!coverageEnabled) return;
+
+  const modes = owners.map((owner) => owner.sourceCoverageMode);
+  const hashes = [
+    run.coverageCatalog && run.coverageCatalog.coverageCatalogHash,
+    ...owners.map((owner) => owner.coverageCatalogHash),
+  ];
+  if (
+    !run.coverageCatalog
+    || !modes.every((mode) => mode === SOURCE_COVERAGE_MODE)
+    || hashes.some((hash) => typeof hash !== "string" || hash.length === 0)
+    || !hashes.every((hash) => hash === hashes[0])
+  ) {
+    throw evidenceError(
+      "coverage_catalog_hash_mismatch",
+      "coverage catalog hash ownership mismatch"
+    );
+  }
 }
 
 function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, config }) {
@@ -763,7 +911,7 @@ function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, 
       attemptId: current.attemptId,
       meetingDate: formatDate(meetingDate),
       reportDepth: Number(config.env.reportDepth),
-    });
+    }, run.coverageCatalog);
   } catch (error) {
     throw mapRunEvidenceError(error);
   }
@@ -793,6 +941,7 @@ function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, 
       runHash: run.state.rawAiDraftHash,
     },
   ];
+  let promptInput;
   for (const artifact of pinnedArtifacts) {
     let content;
     try {
@@ -810,6 +959,17 @@ function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, 
       || sha256(content) !== artifact.runHash
     ) {
       throw evidenceError(artifact.code, `${artifact.label} artifact hash mismatch`);
+    }
+    if (artifact.code === "prompt_input_hash_mismatch") {
+      try {
+        promptInput = JSON.parse(content);
+      } catch (error) {
+        throw evidenceError(
+          "prompt_input_hash_mismatch",
+          "prompt input metadata is unreadable",
+          error
+        );
+      }
     }
   }
 
@@ -880,6 +1040,7 @@ function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, 
   ) {
     throw evidenceError("catalog_hash_mismatch", "validation catalog hash mismatch");
   }
+  assertV2CoveragePublishEvidence({ state, current, run, validation, promptInput });
   if (hasNonOverridableV2Issue(validation)) {
     assertPublishable(validation, config);
   }
