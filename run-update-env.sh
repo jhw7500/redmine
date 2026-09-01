@@ -2,4 +2,5 @@
 set -euo pipefail
 
 export MODE=update
-exec /home/jhw/ai/opencode/projects/redmine/run-report-env.sh
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+exec "$ROOT/run-report-env.sh"
