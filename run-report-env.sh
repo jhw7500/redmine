@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT=/home/jhw/ai/opencode/projects/redmine
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 _requested_mode="${MODE:-}"
 
 if [[ -f "$ROOT/.env" ]]; then
