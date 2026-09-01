@@ -315,9 +315,13 @@
     "sectionHeader": "#### <span style=\"color:blue\">조현우</span>",
     "outputDir": "out",
     "githubOwner": "jhw7500",
+    "aiProvider": "claude",
     "claudeCli": "claude",
+    "codexCli": "codex",
     "aiModel": "sonnet",
+    "codexModel": "gpt-5.6-sol",
     "aiEffort": "low",
+    "aiGenerationScope": "whole",
     "aiMaxInputChars": 100000,
     "aiTimeoutMs": 300000,
     "reportDepth": 2
