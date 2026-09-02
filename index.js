@@ -14,7 +14,12 @@ const {
   validateNonFactRules,
   validateReport,
 } = require("./lib/fact-validator");
-const { publishNotes } = require("./lib/notion-issue-publisher");
+const {
+  COMPLETED_TAG,
+  closePresentedNotes,
+  publishNotes,
+  queryCompletedNotes,
+} = require("./lib/notion-issue-publisher");
 const { normalizeOpenStatusAsOfClauses } = require("./lib/open-status-normalizer");
 const { selectPresentationNotes } = require("./lib/presentation-note-classifier");
 const {
@@ -1300,6 +1305,18 @@ async function runUpdate(config, meetingDate) {
     loadNoteRefs,
     publishedPath,
   });
+  // 발표완료 태그가 붙은 노트의 이슈를 종료한다. 게시가 끝난 뒤에만 수행하고,
+  // 종료 실패가 주간 게시를 되돌리지 않도록 여기서 삼킨다.
+  if (Number(config.env.reportDepth) === 3 && process.env.NOTION_API_KEY) {
+    try {
+      const issueEnv = buildIssueEnv(config);
+      const done = await queryCompletedNotes(issueEnv);
+      const closed = await closePresentedNotes(issueEnv, done);
+      console.log(`[issue] ${COMPLETED_TAG} 종료: ${closed.length}/${done.length}건`);
+    } catch (err) {
+      console.warn(`[issue] 자동 종료 건너뜀: ${err.message}`);
+    }
+  }
   return {
     snapshot,
     snapshotPath,
