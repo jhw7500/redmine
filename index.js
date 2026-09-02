@@ -21,7 +21,7 @@ const {
   queryCompletedNotes,
 } = require("./lib/notion-issue-publisher");
 const { normalizeOpenStatusAsOfClauses } = require("./lib/open-status-normalizer");
-const { selectPresentationNotes } = require("./lib/presentation-note-classifier");
+const { describeEmptySelection, selectPresentationNotes } = require("./lib/presentation-note-classifier");
 const {
   buildCandidatesPath,
   buildGenerationStatePath,
@@ -1282,6 +1282,13 @@ async function runUpdate(config, meetingDate) {
       config.env.presentationNoteMode
     )
     : [];
+  if (Number(config.env.reportDepth) === 3 && !candidates.length) {
+    const notice = describeEmptySelection(
+      snapshot.presentationCandidates || [],
+      config.env.presentationNoteMode
+    );
+    if (notice) console.warn(notice);
+  }
   const loadNoteRefs = candidates.length
     ? async () => {
       const previewRefs = candidates.map((candidate, index) => ({
