@@ -75,6 +75,7 @@ const {
   markWeeklyReady,
   recordWeeklyFailure,
   formatWeeklyFailureLog,
+  runWeeklyPublish,
 } = require("./lib/weekly-pipeline");
 const { validateV2ReportContract } = require("./lib/report-contract");
 const { buildGenerationPlan } = require("./lib/report-generation-plan");
@@ -231,9 +232,15 @@ async function runCollect(config, meetingDate) {
 }
 
 function assertWeeklyProfile(config, mode) {
-  if (mode !== "weekly-prepare") return;
+  if (!["weekly-prepare", "weekly-publish"].includes(mode)) return;
   const env = config && config.env;
-  const expected = {
+  const expected = mode === "weekly-publish" ? {
+    autoApprove: true,
+    reportDepth: 3,
+    validationMode: "block",
+    validationOverride: false,
+    presentationNoteMode: "suggest",
+  } : {
     aiSummarize: true,
     aiProvider: "codex",
     aiModel: "gpt-5.6-sol",
@@ -249,7 +256,7 @@ function assertWeeklyProfile(config, mode) {
   if (!env) throw new Error("[weekly] configuration is required");
   for (const [field, value] of Object.entries(expected)) {
     if (env[field] !== value) {
-      throw new Error(`[weekly] weekly-prepare requires ${field}=${value}`);
+      throw new Error(`[weekly] ${mode} requires ${field}=${value}`);
     }
   }
 }
@@ -1559,7 +1566,7 @@ function buildIssueEnv(config) {
   };
 }
 
-async function runUpdate(config, meetingDate) {
+async function runUpdate(config, meetingDate, options = {}) {
   const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
   const reportPath = buildOutputPath(meetingDate, config);
   if (!fs.existsSync(reportPath)) {
@@ -1642,9 +1649,12 @@ async function runUpdate(config, meetingDate) {
     assertPublishable(fresh.validation, config);
     return evidence;
   };
-  const assertReady = (publishContent) => generation.state.schemaVersion === 2
-    ? validateV2Ready(publishContent).evidence
-    : validateV1Ready(publishContent);
+  const assertReady = (publishContent) => {
+    if (options.assertReady) options.assertReady();
+    return generation.state.schemaVersion === 2
+      ? validateV2Ready(publishContent).evidence
+      : validateV1Ready(publishContent);
+  };
 
   // 발표노트 자동 등록은 프로젝트 정책상 운영 프로필인 depth3 update에서만 수행한다.
   const candidates = Number(config.env.reportDepth) === 3
@@ -1682,6 +1692,8 @@ async function runUpdate(config, meetingDate) {
     draftContent: reportContent,
     loadNoteRefs,
     publishedPath,
+    onBeforeExternalWrite: options.onBeforeExternalWrite,
+    onFinalSection: options.onFinalSection,
   });
   // 발표완료 태그가 붙은 노트의 이슈를 종료한다. 게시가 끝난 뒤에만 수행하고,
   // 종료 실패가 주간 게시를 되돌리지 않도록 여기서 삼킨다.
@@ -1702,6 +1714,7 @@ async function runUpdate(config, meetingDate) {
     validation,
     validationPath,
     publishedPath: result && result.publishedPath,
+    publication: result,
   };
 }
 
@@ -1722,6 +1735,8 @@ async function main() {
       return runCollect(config, meetingDate);
     case "weekly-prepare":
       return runWeeklyPrepare(config, meetingDate);
+    case "weekly-publish":
+      return runWeeklyPublish(config, meetingDate);
     case "generate": {
       const result = await runGenerate(config, meetingDate);
       // update의 게시 게이트와 같은 기준을 쓴다. 다르면 게시 가능한 WARNING이
@@ -1741,7 +1756,7 @@ async function main() {
       return result;
     }
     default:
-      throw new Error(`Unknown MODE: ${config.env.mode}. Use collect, generate, weekly-prepare, update, revalidate, or prune.`);
+      throw new Error(`Unknown MODE: ${config.env.mode}. Use collect, generate, weekly-prepare, weekly-publish, update, revalidate, or prune.`);
   }
 }
 
@@ -1770,6 +1785,7 @@ module.exports = {
   runRevalidate,
   runUpdate,
   runWeeklyPrepare,
+  runWeeklyPublish,
   validateDraft,
   writeCandidates,
   writeGenerationStateIfOwned,
