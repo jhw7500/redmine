@@ -160,8 +160,9 @@ OUTPUT_DIR=/absolute/path/source-selection-pilot node index.js
 - 설정 오류, 입력 상한 초과, source-record 구성 실패, artifact 저장·소유권·검증 실패는 fallback 대상이 아니다. `SOURCE_SELECTION_FALLBACK=0`이면 선택 오류도 그대로 실패한다.
 - 원문에 없는 as-of 날짜나 완료 상태를 합성하지 않는다. 미해결·보류 등은 기존 git 제목 대조와 심볼 pickaxe 검사를 거치며, 근거 없는 상태는 날짜가 있어도 게시를 차단한다. 이 오류는 `VALIDATION_OVERRIDE`나 warn 설정으로 우회할 수 없다.
 - 원문의 부모 조건 보존이 분량·depth보다 우선한다. 같은 부모 아래 여러 항목을 고르면 부모가 반복될 수 있다.
+- 목록 앞·사이·뒤의 부모 문단은 들여쓰기와 빈 줄 경계로 소유자를 판별해 모든 선택된 자손에 보존한다. 소유자가 불명확한 내어쓰기 문단은 추측하지 않고 생성 전에 거부한다. 수집기가 만드는 고정 두 칸 들여쓰기 `↳` 부가 설명은 기존 계약대로 해당 커밋에만 붙인다.
 
-새 run에는 `source-records.json`, `source-selection.json`이 추가된다. 선택 origin(`ai`/`deterministic_fallback`), 실패 코드, 응답 수신 여부, hash를 기록한다. `draft.ai.annotated.md`는 이 방식에서 Markdown이 아니라 **provider stdout 원문**이다. 부분 응답 후 실패해도 보존하고, 실행조차 못 했으면 빈 파일과 `aiResponseReceived:false`로 구분한다.
+새 run에는 `source-records.json`, `source-selection.json`이 추가된다. 선택 origin(`ai`/`deterministic_fallback`), 실패 코드, 응답 수신 여부, hash를 기록한다. `draft.ai.annotated.md`는 이 방식에서 Markdown이 아니라 **provider stdout 원문**이다. UTF-8 스트림 디코딩으로 여러 조각에 나뉜 문자를 보존한다. 부분 응답 후 실패해도 보존하고, 실행조차 못 했으면 빈 파일과 `aiResponseReceived:false`로 구분한다.
 
 재검증·게시 단계는 snapshot + 저장된 카탈로그로 원문 레코드와 보고서를 다시 만들어 동일성을 확인한다. `draft.working.annotated.md`를 임의로 고쳐 통과시키는 복구는 허용하지 않는다. 원본 근거를 바로잡아 새 snapshot/run을 생성하거나, 코드 오류를 수정한 뒤 기존 증거를 그대로 재검증한다. `freeform`의 기존 수동 복구 경로는 유지한다.
 
