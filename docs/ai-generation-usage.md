@@ -162,7 +162,7 @@ OUTPUT_DIR=/absolute/path/source-selection-pilot node index.js
 - 원문에 없는 as-of 날짜나 완료 상태를 합성하지 않는다. 미해결·보류 등은 기존 git 제목 대조와 심볼 pickaxe 검사를 거치며, 근거 없는 상태는 날짜가 있어도 게시를 차단한다. 이 오류는 `VALIDATION_OVERRIDE`나 warn 설정으로 우회할 수 없다.
 - 원문의 부모 조건 보존이 분량·depth보다 우선한다. 같은 부모 아래 여러 항목을 고르면 부모가 반복될 수 있다.
 - 목록 앞·사이·뒤의 부모 문단은 들여쓰기와 빈 줄 경계로 소유자를 판별해 모든 선택된 자손에 보존한다. 소유자가 불명확한 내어쓰기 문단은 추측하지 않고 생성 전에 거부한다. 수집기가 만드는 고정 두 칸 들여쓰기 `↳` 부가 설명은 기존 계약대로 해당 커밋에만 붙인다.
-- 원문 목록은 `-`·`*`·`+`를 지원한다. 수집기의 `개선`을 포함한 기본 커밋 유형 헤딩은 조건 문단이 없을 때 중복 렌더링하지 않는다. GLIBC·wpa_supplicant 버전은 `2.12-rc1`, `2.12b`, `2.12+build.7` 같은 접미사까지 하나의 사실로 보호한다.
+- 원문 목록은 `-`·`*`·`+`를 지원한다. 일반 카테고리 바로 아래의 `개선` 등 기본 커밋 유형 헤딩만 조건 문단이 없을 때 중복 렌더링하지 않는다. ETC의 프로젝트명(`기타` 포함)과 더 깊은 의미 문맥은 보존한다. GLIBC·wpa_supplicant 버전은 `2.12-rc1`, `2.12b`, `2.12+build.7` 같은 접미사까지 하나의 사실로 보호한다.
 
 새 run에는 `source-records.json`, `source-selection.json`이 추가된다. 선택 origin(`ai`/`deterministic_fallback`), 실패 코드, 응답 수신 여부, hash를 기록한다. `draft.ai.annotated.md`는 이 방식에서 Markdown이 아니라 **provider stdout 원문**이다. UTF-8 스트림 디코딩으로 여러 조각에 나뉜 문자를 보존한다. 부분 응답 후 실패해도 보존하고, 실행조차 못 했으면 빈 파일과 `aiResponseReceived:false`로 구분한다.
 
