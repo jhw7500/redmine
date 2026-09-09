@@ -818,7 +818,7 @@ async function runRevalidate(config, meetingDate) {
     }
 
     const annotated = fs.readFileSync(run.paths.workingDraftPath, "utf8");
-    assertSourceSelectionEvidence({run, snapshot, generationState, annotatedContent:annotated,
+    assertSourceSelectionEvidence({run, snapshot, generationState, annotatedContent:annotated, config,
       promptInput:readRevalidationPromptInput(run.paths.promptInputPath)});
     const validationOptions = {
       attemptId: run.state.attemptId,
@@ -1201,7 +1201,7 @@ function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, 
   if (sha256(annotatedContent) !== validation.annotatedDraftHash) {
     throw evidenceError("annotated_draft_hash_mismatch", "annotated draft hash mismatch");
   }
-  assertSourceSelectionEvidence({run, snapshot, generationState:current, annotatedContent, promptInput, validation});
+  assertSourceSelectionEvidence({run, snapshot, generationState:current, annotatedContent, promptInput, validation, config});
   const expectedCleanHash = validation.cleanReportHash;
   if (
     !expectedCleanHash
