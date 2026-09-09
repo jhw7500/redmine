@@ -28,6 +28,7 @@ const {
   buildPublishedPath,
   buildValidationPath,
   sha256,
+  hashObject,
   writeJsonAtomic,
 } = require("./lib/report-artifact");
 const { collectSnapshot, loadSnapshot } = require("./lib/report-snapshot");
@@ -68,6 +69,9 @@ const {
 const { stripAstralChars } = require("./lib/text-normalization");
 const { validateV2ReportContract } = require("./lib/report-contract");
 const { buildGenerationPlan } = require("./lib/report-generation-plan");
+const { buildSourceRecords, buildSelectionPrompt } = require("./lib/source-selection");
+const { generateSourceSelection } = require("./lib/source-selection-generation");
+const { enforceSourceSelectionStatus, assertSourceSelectionEvidence } = require("./lib/source-selection-evidence");
 const {
   annotateSourceCoverageReferences,
   buildSourceCoverageCatalog,
@@ -139,6 +143,8 @@ function validateDraft(snapshot, snapshotPath, reportPath, meetingDate, config, 
 }
 
 const NON_OVERRIDABLE_V2_CODES = new Set([
+  "source_selection_evidence_mismatch",
+  "source_selection_status_unverified",
   "malformed_fact_marker",
   "unknown_fact_id",
   "fact_value_mismatch",
@@ -407,6 +413,10 @@ function prepareV2AnnotatedContent(
 }
 
 async function runGenerateV2(config, meetingDate, dependencies = {}) {
+  const selectionMode = config.env.aiGenerationMethod === "source_selection";
+  if (selectionMode && (config.env.aiGenerationScope || "whole") !== "whole") {
+    throw evidenceError("AI_SELECTION_SCOPE", "source_selection requires AI_GENERATION_SCOPE=whole");
+  }
   runAutomaticPrune(config, dependencies);
   const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
   const reportPath = buildOutputPath(meetingDate, config);
@@ -481,7 +491,18 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       coverageCatalog,
       sourceCoverageMode,
     };
-    const generationPlan = buildGenerationPlan(
+    const records = selectionMode ? buildSourceRecords(snapshot, aiSource, coverageCatalog) : null;
+    if (records) {
+      Object.assign(generationStateBase, {generationMethod:"source_selection", sourceRecordsHash:records.recordsHash});
+      updateRunState(runPaths, attemptId, {generationMethod:"source_selection", sourceRecordsHash:records.recordsHash});
+      writeOwnedOrThrow(generationStatePath, attemptId, {generationMethod:"source_selection", sourceRecordsHash:records.recordsHash});
+      writeImmutableArtifact(path.join(runPaths.runDir, "source-records.json"), JSON.stringify(records, null, 2) + "\n");
+    }
+    const selectionPrompt = records ? buildSelectionPrompt(records, config) : null;
+    const generationPlan = records ? {
+      scope:"whole", promptHash:sha256(selectionPrompt),
+      calls:[{id:"whole", prompt:selectionPrompt, promptLength:selectionPrompt.length}],
+    } : buildGenerationPlan(
       aiSource,
       config,
       meetingDate,
@@ -489,6 +510,7 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       buildAiPrompt
     );
     const promptInput = {
+      ...(records ? {generationMethod:"source_selection", sourceRecordsHash:records.recordsHash} : {}),
       snapshotPath,
       snapshotHash: snapshot.contentHash,
       catalogHash: catalog.catalogHash,
@@ -518,15 +540,18 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
     writeOwnedOrThrow(generationStatePath, attemptId, { promptInputHash });
 
     aiStarted = true;
-    const generated = await generateContent(config, meetingDate, aiSource, {
+    const captureRawAiOutput = (rawAiOutput) => {
+      writeImmutableArtifact(runPaths.aiDraftPath, rawAiOutput);
+      rawAiDraftHash = sha256(rawAiOutput);
+      updateRunState(runPaths, attemptId, { rawAiDraftHash });
+      writeOwnedOrThrow(generationStatePath, attemptId, { rawAiDraftHash });
+    };
+    const generated = records ? await generateSourceSelection(records, config, meetingDate, {
+      prompt:selectionPrompt, onRawAiOutput:captureRawAiOutput,
+    }) : await generateContent(config, meetingDate, aiSource, {
       ...promptOptions,
       generationPlan,
-      onRawAiOutput: (rawAiOutput) => {
-        writeImmutableArtifact(runPaths.aiDraftPath, rawAiOutput);
-        rawAiDraftHash = sha256(rawAiOutput);
-        updateRunState(runPaths, attemptId, { rawAiDraftHash });
-        writeOwnedOrThrow(generationStatePath, attemptId, { rawAiDraftHash });
-      },
+      onRawAiOutput: captureRawAiOutput,
       onRawAiPartOutput: ({ id, index, rawOutput }) => {
         const partPath = path.join(
           runPaths.runDir,
@@ -552,7 +577,17 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
         meetingDateFact
       ).content,
     });
-    const preparedContent = prepareV2AnnotatedContent(
+    if (records) {
+      const sourceSelectionHash = hashObject(generated.evidence);
+      writeImmutableArtifact(path.join(runPaths.runDir,"source-selection.json"), JSON.stringify(generated.evidence,null,2) + "\n");
+      Object.assign(generationStateBase, {sourceSelectionHash});
+      updateRunState(runPaths, attemptId, {sourceSelectionHash});
+      writeOwnedOrThrow(generationStatePath, attemptId, {sourceSelectionHash});
+    }
+    const preparedContent = records ? {
+      content:expandFactReferences(generated.content, catalog),
+      sourceCoverageNormalization:{canonicalizedSectionIds:[], addedSectionMarkerIds:[]},
+    } : prepareV2AnnotatedContent(
       generated.content,
       aiSource,
       catalog,
@@ -594,6 +629,11 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
         sourceCoverageMode,
       }
     );
+    result.validation = enforceSourceSelectionStatus(result.validation, generationStateBase.generationMethod);
+    if (records) Object.assign(result.validation, {
+      generationMethod:"source_selection", sourceRecordsHash:records.recordsHash,
+      sourceSelectionHash:generationStateBase.sourceSelectionHash,
+    });
     result.validation.publishable = isPublishable(result.validation);
     if (result.validation.publishable) {
       result.validation.cleanReportHash = sha256(result.cleanContent);
@@ -602,6 +642,14 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       const revision = appendValidationRevision(runPaths, attemptId, result.validation);
       result.validation = revision.validation;
       const latestValidationPath = path.basename(revision.validationPath);
+      console.log(`[validation] ${result.validation.status}: ${revision.validationPath}`);
+      if (!result.validation.publishable) {
+        const counts = {};
+        for (const issue of result.validation.issues) {
+          if (issue.severity === "error") counts[issue.code] = (counts[issue.code] || 0) + 1;
+        }
+        console.error(`[validation] blocking issues=${JSON.stringify(counts)} run=${runPaths.runDir}`);
+      }
 
       if (!result.validation.publishable) {
         updateRunState(runPaths, attemptId, { status: "validation_failed" });
@@ -772,6 +820,8 @@ async function runRevalidate(config, meetingDate) {
     }
 
     const annotated = fs.readFileSync(run.paths.workingDraftPath, "utf8");
+    assertSourceSelectionEvidence({run, snapshot, generationState, annotatedContent:annotated,
+      promptInput:readRevalidationPromptInput(run.paths.promptInputPath)});
     const validationOptions = {
       attemptId: run.state.attemptId,
       meetingDate: meetingDateText,
@@ -800,6 +850,11 @@ async function runRevalidate(config, meetingDate) {
         run.catalog,
         validationOptions
       );
+    result.validation = enforceSourceSelectionStatus(result.validation, run.state.generationMethod);
+    if (run.state.generationMethod === "source_selection") Object.assign(result.validation, {
+      generationMethod:run.state.generationMethod, sourceRecordsHash:run.state.sourceRecordsHash,
+      sourceSelectionHash:run.state.sourceSelectionHash,
+    });
     const publishable = isPublishable(result.validation);
     result.validation.publishable = publishable;
     if (publishable) {
@@ -1148,6 +1203,7 @@ function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, 
   if (sha256(annotatedContent) !== validation.annotatedDraftHash) {
     throw evidenceError("annotated_draft_hash_mismatch", "annotated draft hash mismatch");
   }
+  assertSourceSelectionEvidence({run, snapshot, generationState:current, annotatedContent, promptInput, validation});
   const expectedCleanHash = validation.cleanReportHash;
   if (
     !expectedCleanHash
@@ -1201,6 +1257,13 @@ async function runUpdate(config, meetingDate) {
   const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
   const reportPath = buildOutputPath(meetingDate, config);
   if (!fs.existsSync(reportPath)) {
+    const statePath = buildGenerationStatePath(reportPath);
+    if (fs.existsSync(statePath)) {
+      const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
+      if (state.status === "failed") throw new Error(
+        `선행 생성 실패: ${state.validationStatus || state.errorCode || "failed"}; run=${state.runDir || statePath}`
+      );
+    }
     throw new Error(`초안 파일이 없습니다: ${reportPath}`);
   }
   const generation = assertGenerationComplete(reportPath, snapshot, meetingDate, config);
@@ -1222,7 +1285,9 @@ async function runUpdate(config, meetingDate) {
       repos: config.repos,
       openIssueVerifierOptions: resolveOpenIssueVerifierOptions(config),
     });
-    const freshValidation = buildPublishTimeValidation(evidence.validation, publishTime);
+    const freshValidation = enforceSourceSelectionStatus(
+      buildPublishTimeValidation(evidence.validation, publishTime), evidence.run.state.generationMethod
+    );
     assertPublishable(freshValidation, config);
     return { evidence, validation: freshValidation };
   };
