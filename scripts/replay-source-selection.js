@@ -28,8 +28,10 @@ function replaySnapshot({snapshotPath, draftPath, categories, outputDir}) {
   }],{knownPaths:coverage.knownPaths});
   const source = annotateSourceCoverageReferences(annotateFactReferences(snapshot.rawContent,catalog),coverage);
   const records = buildSourceRecords(snapshot,source,coverage);
-  const selection = buildFallbackSelection(records);
-  const annotatedContent = expandFactReferences(renderSourceSelection(records,selection,{fallback:true}),catalog);
+  const selection = buildFallbackSelection(records,3);
+  const annotatedContent = expandFactReferences(renderSourceSelection(records,selection,{
+    fallback:true,reportDepth:3,
+  }),catalog);
   const options = {meetingDate:snapshot.meetingDate,reportDepth:3,snapshotHash:snapshot.contentHash,
     sectionHeader:records.heading,repos:{},knownPaths:coverage.knownPaths,
     sourceCoverageMode:'required_sections_notion_advisory_v2'};
