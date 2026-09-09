@@ -154,13 +154,15 @@ SNAPSHOT_PATH=/absolute/path/report-2026-09-09.snapshot.json \
 OUTPUT_DIR=/absolute/path/source-selection-pilot node index.js
 ```
 
-- 이 방식은 `AI_SUMMARIZE=1`, `whole`만 지원한다. `project`는 호출 전에 차단한다. 기존 `freeform` 기본값은 유지한다.
+- 이 방식은 `AI_SUMMARIZE=1`, `whole`만 지원한다. AI 비활성 설정은 `AI_SELECTION_REQUIRES_AI`, `project`는 `AI_SELECTION_SCOPE`로 run 생성 전에 차단한다. 기존 `freeform` 기본값은 유지한다.
 - 정상 AI 응답은 JSON만 허용한다. 존재하지 않는 ID, 다른 카테고리의 ID, 중복, 누락된 섹션, 추가 문장·필드는 거부한다.
 - fallback은 실행 실패·timeout·quota·잘못된 선택 JSON에만 적용한다. AI 재호출 없이 각 canonical section에서 원문 등장 순서의 첫 2개 항목을 발췌하고 **원문 기반 대체 보고서**로 표시한다. 중요도 선별이나 여러 ETC 프로젝트의 균형은 보장하지 않는 축약 대체본이다.
 - 설정 오류, 입력 상한 초과, source-record 구성 실패, artifact 저장·소유권·검증 실패는 fallback 대상이 아니다. `SOURCE_SELECTION_FALLBACK=0`이면 선택 오류도 그대로 실패한다.
+- 수집 결과가 채워진 필수 카테고리에 원문 항목이 없으면 `SOURCE_RECORDS_INVALID`로 차단한다. 이를 원문에 없는 “특이사항 없음”으로 바꾸지 않는다. 실제 변경이 없는 카테고리(`(변경 없음)`)는 기존 coverage 규칙에 따라 필수 섹션에서 제외한다.
 - 원문에 없는 as-of 날짜나 완료 상태를 합성하지 않는다. 미해결·보류 등은 기존 git 제목 대조와 심볼 pickaxe 검사를 거치며, 근거 없는 상태는 날짜가 있어도 게시를 차단한다. 이 오류는 `VALIDATION_OVERRIDE`나 warn 설정으로 우회할 수 없다.
 - 원문의 부모 조건 보존이 분량·depth보다 우선한다. 같은 부모 아래 여러 항목을 고르면 부모가 반복될 수 있다.
 - 목록 앞·사이·뒤의 부모 문단은 들여쓰기와 빈 줄 경계로 소유자를 판별해 모든 선택된 자손에 보존한다. 소유자가 불명확한 내어쓰기 문단은 추측하지 않고 생성 전에 거부한다. 수집기가 만드는 고정 두 칸 들여쓰기 `↳` 부가 설명은 기존 계약대로 해당 커밋에만 붙인다.
+- 원문 목록은 `-`·`*`·`+`를 지원한다. 수집기의 `개선`을 포함한 기본 커밋 유형 헤딩은 조건 문단이 없을 때 중복 렌더링하지 않는다. GLIBC·wpa_supplicant 버전은 `2.12-rc1`, `2.12b`, `2.12+build.7` 같은 접미사까지 하나의 사실로 보호한다.
 
 새 run에는 `source-records.json`, `source-selection.json`이 추가된다. 선택 origin(`ai`/`deterministic_fallback`), 실패 코드, 응답 수신 여부, hash를 기록한다. `draft.ai.annotated.md`는 이 방식에서 Markdown이 아니라 **provider stdout 원문**이다. UTF-8 스트림 디코딩으로 여러 조각에 나뉜 문자를 보존한다. 부분 응답 후 실패해도 보존하고, 실행조차 못 했으면 빈 파일과 `aiResponseReceived:false`로 구분한다.
 

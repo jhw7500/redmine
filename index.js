@@ -70,7 +70,7 @@ const { stripAstralChars } = require("./lib/text-normalization");
 const { validateV2ReportContract } = require("./lib/report-contract");
 const { buildGenerationPlan } = require("./lib/report-generation-plan");
 const { buildSourceRecords, buildSelectionPrompt } = require("./lib/source-selection");
-const { generateSourceSelection } = require("./lib/source-selection-generation");
+const { generateSourceSelection, assertSourceSelectionConfig } = require("./lib/source-selection-generation");
 const { enforceSourceSelectionStatus, assertSourceSelectionEvidence } = require("./lib/source-selection-evidence");
 const {
   annotateSourceCoverageReferences,
@@ -414,9 +414,7 @@ function prepareV2AnnotatedContent(
 
 async function runGenerateV2(config, meetingDate, dependencies = {}) {
   const selectionMode = config.env.aiGenerationMethod === "source_selection";
-  if (selectionMode && (config.env.aiGenerationScope || "whole") !== "whole") {
-    throw evidenceError("AI_SELECTION_SCOPE", "source_selection requires AI_GENERATION_SCOPE=whole");
-  }
+  if (selectionMode) assertSourceSelectionConfig(config);
   runAutomaticPrune(config, dependencies);
   const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
   const reportPath = buildOutputPath(meetingDate, config);
@@ -730,7 +728,7 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
 }
 
 async function runGenerate(config, meetingDate) {
-  return config.env.aiSummarize
+  return config.env.aiSummarize || config.env.aiGenerationMethod === "source_selection"
     ? runGenerateV2(config, meetingDate)
     : runGenerateV1(config, meetingDate);
 }
