@@ -67,6 +67,14 @@ const {
   update,
 } = require("./lib/publisher");
 const { stripAstralChars } = require("./lib/text-normalization");
+const {
+  buildWeeklyPipelinePaths,
+  createWeeklyAttempt,
+  patchWeeklyStatus,
+  markWeeklyReady,
+  recordWeeklyFailure,
+  formatWeeklyFailureLog,
+} = require("./lib/weekly-pipeline");
 const { validateV2ReportContract } = require("./lib/report-contract");
 const { buildGenerationPlan } = require("./lib/report-generation-plan");
 const { buildSourceRecords, buildSelectionPrompt } = require("./lib/source-selection");
@@ -219,6 +227,220 @@ async function runCollect(config, meetingDate) {
     );
   }
   return result;
+}
+
+function assertWeeklyProfile(config, mode) {
+  if (mode !== "weekly-prepare") return;
+  const env = config && config.env;
+  const expected = {
+    aiSummarize: true,
+    aiProvider: "codex",
+    aiModel: "gpt-5.6-sol",
+    aiEffort: "low",
+    aiGenerationMethod: "source_selection",
+    aiGenerationScope: "whole",
+    sourceSelectionFallback: true,
+    reportDepth: 3,
+    validationMode: "block",
+    validationOverride: false,
+    presentationNoteMode: "suggest",
+  };
+  if (!env) throw new Error("[weekly] configuration is required");
+  for (const [field, value] of Object.entries(expected)) {
+    if (env[field] !== value) {
+      throw new Error(`[weekly] weekly-prepare requires ${field}=${value}`);
+    }
+  }
+}
+
+function readPrepareEvidence(outputDir, filePath, label) {
+  if (typeof filePath !== "string" || !path.isAbsolute(filePath)) {
+    throw new Error(`${label} must be an absolute path`);
+  }
+  const outputRoot = path.resolve(outputDir);
+  const resolvedPath = path.resolve(filePath);
+  const relative = path.relative(outputRoot, resolvedPath);
+  if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`${label} escapes configured output directory`);
+  }
+  let cursor = outputRoot;
+  for (const segment of relative.split(path.sep)) {
+    cursor = path.join(cursor, segment);
+    const stats = fs.lstatSync(cursor);
+    if (stats.isSymbolicLink()) throw new Error(`${label} path must not contain a symlink`);
+  }
+  if (!fs.statSync(resolvedPath).isFile()) throw new Error(`${label} must be a regular file`);
+  return fs.readFileSync(resolvedPath, "utf8");
+}
+
+function readyEvidenceError(message, cause) {
+  const error = new Error(message, cause ? { cause } : undefined);
+  error.code = "ready_evidence_mismatch";
+  return error;
+}
+
+function prepareFailureArtifacts(collectResult, generationResult, generationState) {
+  const candidates = [
+    collectResult && collectResult.snapshotPath,
+    generationResult && generationResult.generationStatePath,
+    generationResult && generationResult.reportPath,
+    generationResult && generationResult.validationPath,
+    generationResult && generationResult.rejectedReportPath,
+  ];
+  const runPaths = generationResult && generationResult.runPaths;
+  if (runPaths) {
+    candidates.push(
+      runPaths.promptInputPath,
+      runPaths.aiDraftPath,
+      runPaths.workingDraftPath,
+      runPaths.cleanReportPath
+    );
+    if (generationState && generationState.latestValidationPath) {
+      candidates.push(path.join(runPaths.runDir, generationState.latestValidationPath));
+    }
+    if (generationState && generationState.latestRejectedReportPath) {
+      candidates.push(path.join(runPaths.runDir, generationState.latestRejectedReportPath));
+    }
+  }
+  return candidates.filter((candidate) => typeof candidate === "string");
+}
+
+async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
+  assertWeeklyProfile(config, "weekly-prepare");
+  const collect = dependencies.runCollect || runCollect;
+  const generateReport = dependencies.runGenerate || runGenerate;
+  const validateEvidence = dependencies.assertV2PublishEvidence || assertV2PublishEvidence;
+  const randomUUID = dependencies.randomUUID || crypto.randomUUID;
+  const now = dependencies.now || (() => new Date().toISOString());
+  const meetingDateText = formatDate(meetingDate);
+  const paths = buildWeeklyPipelinePaths(config.env.outputDir, meetingDateText);
+  const attemptId = randomUUID();
+  let state = createWeeklyAttempt({
+    outputDir: config.env.outputDir,
+    meetingDate: meetingDateText,
+    reportDepth: 3,
+    attemptId,
+    now,
+  });
+  let stage = "collect";
+  let collectResult;
+  let generationResult;
+  let generationState;
+  let validation;
+
+  try {
+    collectResult = await collect(config, meetingDate);
+    if (!collectResult || !collectResult.snapshot || collectResult.snapshot.status !== "sealed") {
+      const error = new Error("weekly prepare requires a sealed collection snapshot");
+      error.code = "COLLECT_PARTIAL";
+      throw error;
+    }
+
+    state = patchWeeklyStatus(paths, attemptId, { stage: "generate" });
+    stage = "generate";
+    generationResult = await generateReport(config, meetingDate);
+
+    state = patchWeeklyStatus(paths, attemptId, { stage: "validate" });
+    stage = "validate";
+    validation = generationResult && generationResult.validation;
+    if (!validation || validation.schemaVersion !== 2 || !isPublishable(validation)) {
+      const error = new Error("weekly generation returned non-publishable validation");
+      error.code = "VALIDATION_FAILED";
+      throw error;
+    }
+
+    let snapshotPath;
+    let generationStatePath;
+    let reportPath;
+    let snapshotText;
+    let generationStateText;
+    let reportContent;
+    let snapshot;
+    try {
+      snapshotPath = path.resolve(collectResult.snapshotPath);
+      generationStatePath = path.resolve(generationResult.generationStatePath);
+      reportPath = path.resolve(generationResult.reportPath);
+      snapshotText = readPrepareEvidence(config.env.outputDir, snapshotPath, "weekly snapshot");
+      generationStateText = readPrepareEvidence(
+        config.env.outputDir,
+        generationStatePath,
+        "weekly generation state"
+      );
+      reportContent = readPrepareEvidence(config.env.outputDir, reportPath, "weekly report");
+      generationState = JSON.parse(generationStateText);
+      snapshot = JSON.parse(snapshotText);
+      if (
+        snapshot.status !== "sealed"
+        || snapshot.contentHash !== collectResult.snapshot.contentHash
+        || generationState.schemaVersion !== 2
+        || generationState.status !== "complete"
+        || generationState.generationMethod !== "source_selection"
+        || generationState.reportDepth !== 3
+      ) {
+        throw new Error("weekly READY evidence metadata mismatch");
+      }
+    } catch (error) {
+      throw readyEvidenceError("weekly READY evidence is missing or invalid", error);
+    }
+
+    try {
+      const evidence = validateEvidence({
+        state: generationState,
+        reportContent,
+        snapshot,
+        meetingDate,
+        config,
+      });
+      if (!evidence || !isPublishable(evidence.validation)) {
+        throw new Error("latest validation is not publishable");
+      }
+      if (
+        readPrepareEvidence(config.env.outputDir, snapshotPath, "weekly snapshot") !== snapshotText
+        || readPrepareEvidence(
+          config.env.outputDir,
+          generationStatePath,
+          "weekly generation state"
+        ) !== generationStateText
+        || readPrepareEvidence(config.env.outputDir, reportPath, "weekly report") !== reportContent
+      ) {
+        throw new Error("weekly READY evidence changed after validation");
+      }
+    } catch (error) {
+      throw readyEvidenceError("weekly READY evidence validation failed", error);
+    }
+
+    stage = "publish";
+    try {
+      state = markWeeklyReady(paths, attemptId, {
+        snapshotPath,
+        snapshotHash: snapshot.contentHash,
+        generationAttemptId: generationState.attemptId,
+        generationStatePath,
+        reportPath,
+        reportHash: sha256(reportContent),
+      });
+    } catch (error) {
+      throw readyEvidenceError("weekly READY evidence could not be bound", error);
+    }
+    return { state, collectResult, generationResult };
+  } catch (error) {
+    const failureStage = error && error.code === "ready_evidence_mismatch" ? "publish" : stage;
+    const recorded = recordWeeklyFailure({
+      paths,
+      state,
+      stage: failureStage,
+      error,
+      validation,
+      artifacts: prepareFailureArtifacts(collectResult, generationResult, generationState),
+      redmineWriteAttempted: false,
+      serverState: "unchanged",
+      retryCommand: `MODE=weekly-prepare MEETING_DATE=${meetingDateText} node index.js`,
+      now,
+    });
+    console.error(formatWeeklyFailureLog(recorded.failure, recorded.markdownPath));
+    error.weeklyFailure = recorded;
+    throw error;
+  }
 }
 
 function printPruneSummary(summary, { dryRun }) {
@@ -1454,6 +1676,8 @@ async function main() {
   switch (config.env.mode) {
     case "collect":
       return runCollect(config, meetingDate);
+    case "weekly-prepare":
+      return runWeeklyPrepare(config, meetingDate);
     case "generate": {
       const result = await runGenerate(config, meetingDate);
       // update의 게시 게이트와 같은 기준을 쓴다. 다르면 게시 가능한 WARNING이
@@ -1473,7 +1697,7 @@ async function main() {
       return result;
     }
     default:
-      throw new Error(`Unknown MODE: ${config.env.mode}. Use collect, generate, update, revalidate, or prune.`);
+      throw new Error(`Unknown MODE: ${config.env.mode}. Use collect, generate, weekly-prepare, update, revalidate, or prune.`);
   }
 }
 
@@ -1488,6 +1712,7 @@ module.exports = {
   assertGenerationComplete,
   assertPublishable,
   assertV2PublishEvidence,
+  assertWeeklyProfile,
   buildPublishTimeValidation,
   hasNonOverridableV2Issue,
   isPublishable,
@@ -1500,6 +1725,7 @@ module.exports = {
   runPrune,
   runRevalidate,
   runUpdate,
+  runWeeklyPrepare,
   validateDraft,
   writeCandidates,
   writeGenerationStateIfOwned,
