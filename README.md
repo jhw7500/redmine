@@ -103,7 +103,8 @@ Weekly unattended operation
 | `out/pipeline/YYYY-MM-DD/failures/<timestamp>-<stage>-<attempt>.md` | 원인, 대표 issue, 서버 상태, 확인할 산출물, 같은 회의일 재실행 명령을 읽기 순서로 정리한 장애 기록 |
 
 `[weekly][FAIL]`은 비정상 종료와 함께 `stage`, 가장 구체적인 detail code, 짧은 원인,
-Markdown 장애 파일을 한 줄로 가리킨다. 상세하고 안정된 분류 code는 JSON/Markdown에서 확인한다.
+Markdown 장애 파일을 한 줄로 가리킨다. 안정된 분류 code와 `primaryIssueCode`는 JSON에서
+확인하며, Markdown은 원인·issue 집계와 예시·서버 상태·산출물·재실행 명령을 제공한다.
 `[weekly][SKIP] status=failed`는 prepare가 이미 실패해 publish가 exit 0으로 끝났다는 뜻이고,
 `[weekly][SKIP] already-published`는 검증 완료한 같은 attempt를 멱등하게 건너뛴다는 뜻이다.
 두 SKIP 모두 새 장애 파일이나 알림을 만들지 않고 Redmine 요청도 보내지 않는다.

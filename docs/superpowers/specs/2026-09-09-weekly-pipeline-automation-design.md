@@ -126,7 +126,7 @@ READY로 취급하지 않는다.
 항상 `3`만 허용한다. READY 이후에는 pipeline과 generation 증거 양쪽의 depth가 모두 `3`이어야
 한다. `published.version`은 PUT 후 authoritative GET이 반환한 Wiki version이며,
 `published.sectionHash`는 `expectedSectionHash`와 같아야 한다. 이미 `published`인 attempt를 다시
-실행하면 stdout에는 정확히 `[weekly][SKIP] already-published` 한 줄만 내고, 기존 `published`
+실행하면 정확히 하나의 `[weekly][SKIP] already-published` log event를 내고, 기존 `published`
 객체는 status/result에 그대로 보존하며 새 Redmine 요청·장애 산출물·알림을 만들지 않는다.
 
 허용 전이는 `preparing -> ready|failed`, `ready -> publishing|failed`,
