@@ -94,6 +94,7 @@ out/pipeline/YYYY-MM-DD/status.json
   "schemaVersion": 1,
   "meetingDate": "2026-09-16",
   "pipelineAttemptId": "uuid",
+  "reportDepth": 3,
   "status": "preparing|ready|publishing|published|failed",
   "stage": "collect|generate|validate|publish|publish_verify",
   "startedAt": "ISO-8601",
@@ -121,7 +122,9 @@ out/pipeline/YYYY-MM-DD/status.json
 전에는 `null`이다. 다른 회의일, 다른 depth, 경로 이탈, symlink, hash 또는 attempt 불일치는
 READY로 취급하지 않는다.
 
-허용 전이는 `preparing -> ready|failed`와 `ready -> publishing -> published|failed`뿐이다.
+허용 전이는 `preparing -> ready|failed`, `ready -> publishing|failed`,
+`publishing -> published|failed`뿐이다. READY 증거가 게시 전에 달라진 경우에는 외부 쓰기 없이
+`ready -> failed`로 전이한다.
 `publishing`에서 프로세스가 끝난 상태는 다음 실행에서 완료로 추정하지 않고 중간 종료 실패로
 처리한다. PUT 직전에는 `expectedSectionHash`를 상태에 먼저 기록해 쓰기 시도 범위를 남긴다.
 수동 재실행은 기존 상태를 이어 쓰지 않고 새 `pipelineAttemptId`로 시작한다.
@@ -184,6 +187,7 @@ cron stdout에는 다음 한 줄을 출력한다.
 | 준비 상태 | 동작 | 종료 | 알림 |
 |---|---|---:|---|
 | `failed` | `[weekly][SKIP]`와 기존 failure 경로 출력, Redmine 미호출 | 0 | 없음 |
+| `published` | `[weekly][SKIP] already-published`와 검증 메타데이터 출력, Redmine 미호출 | 0 | 없음 |
 | 상태 없음 또는 `preparing` 중단 | `prepare_incomplete` 실패 산출물 생성, Redmine 미호출 | 비정상 | 1회 |
 | `publishing` 중단 | `publish_incomplete` 기록, 자동 재게시하지 않음 | 비정상 | 1회 |
 | 회의일/depth/hash/attempt 불일치 | `ready_evidence_mismatch` 실패, Redmine 미호출 | 비정상 | 1회 |
