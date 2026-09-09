@@ -109,7 +109,7 @@ out/pipeline/YYYY-MM-DD/status.json
   "failureArtifact": "absolute path or null",
   "published": {
     "wikiTitle": "page title",
-    "wikiVersion": 12,
+    "version": 12,
     "updatedOn": "ISO-8601",
     "sectionHash": "sha256",
     "verifiedAt": "ISO-8601"
@@ -121,6 +121,13 @@ out/pipeline/YYYY-MM-DD/status.json
 있어야 하며 `published`는 서버 재조회 메타데이터까지 있어야 한다. `published` 객체는 게시
 전에는 `null`이다. 다른 회의일, 다른 depth, 경로 이탈, symlink, hash 또는 attempt 불일치는
 READY로 취급하지 않는다.
+
+구현에서 확정된 `reportDepth`는 pipeline attempt 자체에 고정되는 양의 정수이고, 주간 래퍼는
+항상 `3`만 허용한다. READY 이후에는 pipeline과 generation 증거 양쪽의 depth가 모두 `3`이어야
+한다. `published.version`은 PUT 후 authoritative GET이 반환한 Wiki version이며,
+`published.sectionHash`는 `expectedSectionHash`와 같아야 한다. 이미 `published`인 attempt를 다시
+실행하면 stdout에는 정확히 `[weekly][SKIP] already-published` 한 줄만 내고, 기존 `published`
+객체는 status/result에 그대로 보존하며 새 Redmine 요청·장애 산출물·알림을 만들지 않는다.
 
 허용 전이는 `preparing -> ready|failed`, `ready -> publishing|failed`,
 `publishing -> published|failed`뿐이다. READY 증거가 게시 전에 달라진 경우에는 외부 쓰기 없이
@@ -187,7 +194,7 @@ cron stdout에는 다음 한 줄을 출력한다.
 | 준비 상태 | 동작 | 종료 | 알림 |
 |---|---|---:|---|
 | `failed` | `[weekly][SKIP]`와 기존 failure 경로 출력, Redmine 미호출 | 0 | 없음 |
-| `published` | `[weekly][SKIP] already-published`와 검증 메타데이터 출력, Redmine 미호출 | 0 | 없음 |
+| `published` | `[weekly][SKIP] already-published` 출력, status의 기존 검증 메타데이터 보존, Redmine 미호출 | 0 | 없음 |
 | 상태 없음 또는 `preparing` 중단 | `prepare_incomplete` 실패 산출물 생성, Redmine 미호출 | 비정상 | 1회 |
 | `publishing` 중단 | `publish_incomplete` 기록, 자동 재게시하지 않음 | 비정상 | 1회 |
 | 회의일/depth/hash/attempt 불일치 | `ready_evidence_mismatch` 실패, Redmine 미호출 | 비정상 | 1회 |
@@ -235,8 +242,11 @@ PUT 뒤에는 같은 wiki JSON을 다시 GET하고 `extractSection()`으로 조�
 9. Node 22.23.1과 운영 Node 24.12.0에서 전체 테스트를 통과한다.
 10. 최소 cron 환경에서 두 wrapper가 저장소 자신의 `index.js`를 실행하며 운영 프로필을 정확히
     전달한다.
-11. 2026-09-09 sealed snapshot 회귀 실행은 depth 3 게시 가능 보고서를 생성하고, 버전 범위와
-    듀얼와이드 원인·수정·검증 문구를 보존한다.
+11. 2026-09-09 canonical sealed snapshot 회귀 실행은 depth 3 게시 가능 보고서를 생성한다.
+    저장된 snapshot 하나에 두 사고 사실이 모두 없으므로, `wpa_supplicant 2.12-rc1/2.12`는
+    no-I/O exact-string validator로 버전 범위 보존을 확인하고, 듀얼와이드의 동일 `exp_time`·서로
+    다른 `ae_on` 원인과 수정·검증 문구는 최신 saved v5 sealed snapshot 및 그 complete
+    source-selection run으로 확인한다.
 12. 실제 운영 전환 전 dry-run prepare, 로컬 fake Redmine 통합 테스트, 실제 crontab 조회를
     완료하고, 전환 뒤 다음 수요일의 READY/PUBLISHED 상태와 서버 재조회 증거를 확인한다.
 
@@ -258,3 +268,22 @@ PUT 뒤에는 같은 wiki JSON을 다시 GET하고 `extractSection()`으로 조�
 - 운영 프로필은 새 `run-weekly-prepare-env.sh`, `run-weekly-publish-env.sh`가 소유한다.
 - 파이프라인 단위·통합 테스트는 `lib/__tests__/weekly-pipeline.test.js`와 기존 publisher/index/wrapper
   테스트에 둔다.
+
+## Execution Notes
+
+- Ruling: 저장된 2026-09-09 snapshot 중 `wpa_supplicant 2.12-rc1/2.12` literal과 hydrated
+  듀얼와이드 원인·수정·검증을 동시에 가진 파일은 없다. sealed input을 수정하거나 합성하지 않고,
+  canonical snapshot의 일반 offline replay, exact-string no-I/O version validator, 최신 saved v5
+  sealed snapshot의 complete depth-3 source-selection evidence로 인수 증거를 분리한다. 이 판정이
+  틀리면 단일 artifact 재현성이 부족하므로 두 입력 사실을 모두 가진 새 sealed snapshot을 수집해
+  다시 replay해야 한다.
+- Canonical replay: snapshot file SHA-256
+  `ec5aa022f43eb20c52f6a2a832945f7c34964dc16d4b464ae6fe46312ff2fa0a`, report SHA-256
+  `b5d0f867228b9bab97b27da645c1d201ab6046dbba5bcb5707a83f3efdd5e065`, publishable
+  `WARNING`, error blocker 0.
+- Saved v5 evidence: snapshot file SHA-256
+  `0c5415aefba0694e3bff304c25132043df02e86fa46922b56c0c5a93312426a9`, run state SHA-256
+  `05e15c2364c473123797778745abac379f53678257cd352b33982771a05dceee`, clean report SHA-256
+  `59771afb0e1419fbd17989e19ea857ee08bf69134fe8763ad54630326084e6fe`, validation SHA-256
+  `ed3c16038ca47db7575b0a1492592f28971624676906a9213168f4232bcdc708`; state `complete`,
+  depth 3, method `source_selection`, validation `WARNING`, error blocker 0.

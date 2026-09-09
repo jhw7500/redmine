@@ -78,6 +78,55 @@ Run
 - Apply expired run cleanup: `MODE=prune PRUNE_APPLY=1 ./run-report-env.sh`
 - Depth 비교 테스트: 먼저 `MODE=collect ./run-report-env.sh` 실행 후 `./run-depth-test.sh` — 동일 sealed snapshot으로 depth 1/2/3/4 생성·검증
 
+Weekly unattended operation
+
+주간 자동화는 저장소의 두 래퍼만 호출한다. prepare 래퍼는 수집부터 depth 3
+`source_selection` 생성·검증과 READY 증거 결속까지 한 번에 수행하고, publish 래퍼는 같은
+회의일의 READY snapshot/generation/report hash를 다시 검증한 뒤에만 Redmine 쓰기를 시작한다.
+일반 `collect`, `generate`, `revalidate`, `update`, `prune` 명령과 일반 generate의 `freeform`
+기본값은 그대로 유지된다.
+
+전환할 cron 항목은 정확히 다음 두 줄이다. 실제 crontab 교체 전에는 기존 내용을 별도 파일로
+백업하고, 다른 항목이 byte 단위로 유지되는지 확인한다.
+
+```cron
+5 6 * * 3 /home/jhw/ai/opencode/projects/redmine/run-weekly-prepare-env.sh >> /home/jhw/ai/opencode/projects/redmine/out/cron.log 2>&1
+45 6 * * 3 /home/jhw/ai/opencode/projects/redmine/run-weekly-publish-env.sh >> /home/jhw/ai/opencode/projects/redmine/out/cron.log 2>&1
+```
+
+회의일별 상태와 실패 증거는 다음 위치에 남는다.
+
+| 경로 | 의미 |
+| --- | --- |
+| `out/pipeline/YYYY-MM-DD/status.json` | 현재 attempt의 `preparing`, `ready`, `publishing`, `published`, `failed` 상태와 depth/hash/게시 검증 증거 |
+| `out/pipeline/YYYY-MM-DD/failures/<timestamp>-<stage>-<attempt>.json` | 안정된 오류 code, 원래 세부 `primaryIssueCode`, issue 집계, 산출물 hash, Redmine 쓰기 여부와 서버 상태 |
+| `out/pipeline/YYYY-MM-DD/failures/<timestamp>-<stage>-<attempt>.md` | 원인, 대표 issue, 서버 상태, 확인할 산출물, 같은 회의일 재실행 명령을 읽기 순서로 정리한 장애 기록 |
+
+`[weekly][FAIL]`은 비정상 종료와 함께 `stage`, 가장 구체적인 detail code, 짧은 원인,
+Markdown 장애 파일을 한 줄로 가리킨다. 상세하고 안정된 분류 code는 JSON/Markdown에서 확인한다.
+`[weekly][SKIP] status=failed`는 prepare가 이미 실패해 publish가 exit 0으로 끝났다는 뜻이고,
+`[weekly][SKIP] already-published`는 검증 완료한 같은 attempt를 멱등하게 건너뛴다는 뜻이다.
+두 SKIP 모두 새 장애 파일이나 알림을 만들지 않고 Redmine 요청도 보내지 않는다.
+
+`serverState=unchanged`는 Wiki 쓰기가 확인되지 않았다는 뜻이다. `written_unverified`는 PUT 또는
+다른 Redmine 쓰기가 적용됐을 수 있으나 후속 GET의 정확한 섹션 일치를 확인하지 못했다는
+뜻이고, 자동 rollback이나 재게시는 하지 않는다. `verified`는 서버 섹션과 고정한 hash가 일치한
+경우다. `redmineWriteAttempted`는 외부 쓰기 경계를 넘었는지를 별도로 나타낸다.
+
+수동 복구는 호출자가 지정한 `MEETING_DATE`, `OUTPUT_DIR`, `SNAPSHOT_PATH`를 보존한다.
+
+```bash
+rtk env MEETING_DATE=2026-09-16 ./run-weekly-prepare-env.sh
+rtk env MEETING_DATE=2026-09-16 ./run-weekly-publish-env.sh
+```
+
+`publishing`에서 중단된 상태는 서버가 이미 바뀌었을 수 있는 stale 상태다. 먼저 Redmine Wiki와
+발표노트 Issue를 직접 확인한 다음 새 prepare attempt를 시작해야 하며, 기존 attempt를 자동으로
+이어 게시하지 않는다. 검증 실패도 canonical 보고서로 승격하거나 Redmine을 변경하지 않는다.
+대신 run 아래의 provider 원본 `draft.ai.annotated.md`, 수동 복구용
+`draft.working.annotated.md`, `report.rejected.NNN.md`, `validation.NNN.json`과 파이프라인 장애
+JSON/Markdown을 모두 유지한다.
+
 Mode boundaries
 - `collect`: Git/Notion/session을 조회하고 sealed snapshot만 저장. AI/Redmine 쓰기 없음.
 - `generate`: 기존 sealed snapshot만 읽음. 수집하지 않고 AI 요약·사실 검증 후 depth 파일 저장. `AI_SUMMARIZE=1`이면 schema v2, `AI_SUMMARIZE=0`이면 기존 schema v1.
@@ -163,7 +212,7 @@ Source coverage contract (schema v2)
 Pilot and publication approval
 - 로컬 fake CLI/server 회귀 테스트는 실제 Claude 호출이나 Redmine 게시가 아니다. 실제 Claude pilot과 실제 Redmine publication은 각각 별도의 명시적 승인을 받은 뒤에만 실행한다.
 
-Current cron flow (Wednesday, Asia/Seoul)
+Current cron flow before the two-wrapper rollout (Wednesday, Asia/Seoul)
 - 06:05 `collect`
 - 06:15 depth3 `generate`
 - 06:30 depth2 `generate`

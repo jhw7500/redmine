@@ -560,7 +560,7 @@ rtk git commit -m "feat(report): add weekly cron entry points"
 - Modify: `docs/superpowers/specs/2026-09-09-weekly-pipeline-automation-design.md`
 - Modify: `docs/superpowers/plans/2026-09-09-weekly-pipeline-automation.md`
 
-- [ ] **Step 1: Document exact operation and recovery contract**
+- [x] **Step 1: Document exact operation and recovery contract**
 
 Add the two cron lines, state locations, failure artifact fields, `[weekly][FAIL]`/`[weekly][SKIP]` meanings, and these recovery commands:
 
@@ -571,17 +571,19 @@ rtk env MEETING_DATE=2026-09-16 ./run-weekly-publish-env.sh
 
 State explicitly that a stale `publishing` state needs server inspection and a new prepare attempt; it is never auto-republished. Explain that validation failure retains rejected/working/provider outputs but does not modify Redmine.
 
-- [ ] **Step 2: Run a no-network deterministic 2026-09-09 replay**
+- [x] **Step 2: Validate the no-network deterministic 2026-09-09 artifact set**
 
-Use the sealed 2026-09-09 snapshot and stored selection/replay inputs already under this worktree. Write output into a new isolated directory. Require depth 3, source-selection evidence, publishable validation, zero blocking issues, and preservation of:
+Use the canonical sealed 2026-09-09 snapshot and stored prior draft for a fresh general replay in a new isolated directory. Because no saved snapshot contains every incident fact, use the no-I/O exact-string validator for the version range and the latest saved v5 sealed snapshot plus its complete schema-v2 source-selection run for the corrected dual-wide detail. Require depth 3, source-selection evidence, publishable validation, zero blocking issues, and preservation across that evidence split of:
 
 - `wpa_supplicant 2.12-rc1/2.12` as a version range rather than ratio;
 - dual-wide 120p cause as same exposure time with different AE settings;
 - cause, fix, and verification detail in the selected source content.
 
+Record that no single historical sealed artifact proves both incident fixes; do not edit or synthesize a sealed input to make the criterion appear atomic.
+
 Record exact command, input artifact hashes, output run path, report hash, validation status, and blocker count in the plan Execution Notes. Do not call Redmine.
 
-- [ ] **Step 3: Test Node 22 and Node 24 full suites**
+- [x] **Step 3: Test Node 22 and Node 24 full suites**
 
 ```bash
 rtk /home/jhw/.nvm/versions/node/v22.23.1/bin/node \
@@ -593,7 +595,7 @@ rtk git diff --check
 
 Expected: 0 failed tests on both runtimes and no whitespace errors. Save concise pass/fail summaries and full logs outside the repository or under ignored `out/`.
 
-- [ ] **Step 4: Audit plan/spec coverage and placeholders**
+- [x] **Step 4: Audit plan/spec coverage and placeholders**
 
 Check every numbered spec acceptance criterion against at least one named test or rollout check. Run:
 
@@ -606,7 +608,7 @@ rtk rg -n -e 'T''BD' -e 'T''ODO' -e 'F''IXME' \
 
 Expected: no unresolved placeholder. Update the plan checkboxes and Execution Notes with actual evidence only; never pre-mark a step complete.
 
-- [ ] **Step 5: Commit documentation and acceptance evidence**
+- [x] **Step 5: Commit documentation and acceptance evidence**
 
 ```bash
 rtk git add README.md \
@@ -689,4 +691,28 @@ The first scheduled live confirmation is the next Wednesday run: `06:05 ready`, 
 - Baseline branch: `fix/source-selection-version-range`, based on `origin/main`, with the version-range, failed-draft retention, depth-3 selection, cause/fix evidence, dual-wide correction, and approved design commits already present.
 - Baseline operational incident: 2026-09-09 freeform generation failed before source-selection deployment; independent update then emitted a secondary missing-draft alert. The post-merge replay exposed the separate `2.12-rc1/2.12` ratio false positive.
 - Existing successful manual artifact/server publication is evidence for report content, not for the new two-stage cron state machine.
-- Add actual RED/GREEN commands, test counts, replay paths/hashes, review findings, PR URL, merge commit, cron backup path, and installed-cron verification here during execution.
+- Task 7 deterministic replay command (offline only): `rtk /home/jhw/.nvm/versions/node/v22.23.1/bin/node scripts/replay-source-selection.js --snapshot /home/jhw/ai/opencode/projects/redmine/out/report-2026-09-09.snapshot.json --draft /home/jhw/ai/opencode/projects/redmine/out/runs/2026-09-09/6ba8b9e2-8af9-41d7-9b4c-cc2943f2dcfa/draft.working.annotated.md --output-dir out/replay-weekly-pipeline-task7-final-20260909/2026-09-09`. It made no AI call, live status check, provider call, or Redmine request.
+- Task 7 replay inputs: snapshot file SHA-256 `ec5aa022f43eb20c52f6a2a832945f7c34964dc16d4b464ae6fe46312ff2fa0a` (sealed content hash `f03aa1505e02657a2f039916dc0fe1fd2b5887e033d12e62ca106dc8e7f9114c`) and prior annotated draft SHA-256 `82be27f79e8b67f2c3d780fc684cec04a538ddf6db8b79cfd33c1b75be0fb94b`. Ruling: the linked worktree has the earlier replay directory but not its sealed snapshot or historic run directory, so the immutable files in the main checkout's ignored `out/` were read in place rather than copied or recollected; if those paths are not retained, this exact replay command is not portable even though the recorded hashes still identify the inputs.
+- Task 7 replay result: `out/replay-weekly-pipeline-task7-final-20260909/2026-09-09/`; `report.md` SHA-256 `b5d0f867228b9bab97b27da645c1d201ab6046dbba5bcb5707a83f3efdd5e065`, validation artifact SHA-256 `972bdf9b049f7bd79d5deb29ef25489eddbfec1b4b08223de97eaaad7277e64e`, selection artifact SHA-256 `dd50db8360512200ec734bb4865632e59bca724e384a00e4ae1a471730efd751`. Depth 3 selected 24 of 431 source records. Validation was publishable `WARNING`, with 0 error blockers and 168 advisory `missing_source_id` warnings. The prior freeform draft comparison remained `FAIL` with 9 `fact_subject_mismatch` errors.
+- Task 7 replay content ruling: no saved 2026-09-09 snapshot contains the literal `wpa_supplicant 2.12-rc1/2.12`; the canonical snapshot contains `wpa_supplicant 2.12` and predates hydrated `↳ 원인/수정/검증` briefing lines. No single historical sealed artifact can prove both incident fixes, so acceptance is split without editing or synthesizing sealed input: (a) a no-I/O exact-string validator check classified `2.12-rc1/2.12` as one `named_version` bound to `wpa_supplicant`, preserved it byte-for-byte, and passed with 0 blockers; (b) the latest saved v5 sealed snapshot and its complete depth-3 schema-v2 `source_selection` run preserve the corrected same-`exp_time`, asymmetric-`ae_on` cause, pair-level fix, and measured verification. If a single-artifact replay is later required, a newly collected sealed input containing both facts is necessary.
+- Task 7 v5 evidence replay command (offline only): `rtk /home/jhw/.nvm/versions/node/v22.23.1/bin/node scripts/replay-source-selection.js --snapshot /home/jhw/ai/opencode/projects/redmine/out/meeting-report-20260909-v5/report-2026-09-09.snapshot.json --draft /home/jhw/ai/opencode/projects/redmine/out/meeting-report-20260909-v5/runs/2026-09-09/119c25fb-4688-41e9-913c-1646e4aa7f53/draft.working.annotated.md --output-dir out/replay-weekly-pipeline-task7-v5-20260909/2026-09-09`. Snapshot file SHA-256 is `0c5415aefba0694e3bff304c25132043df02e86fa46922b56c0c5a93312426a9` (sealed content hash `ef91f41c4cf2ac6f1c8482b069324a356b94eb3e19bc78840fc176fbb62806a6`); run state SHA-256 is `05e15c2364c473123797778745abac379f53678257cd352b33982771a05dceee`, source selection SHA-256 is `339901f2e2b73539e49ffded621d9e3547fc4dde5432dd00409f2ed5bd2b361f`, working draft SHA-256 is `2a9c192ed0dea3e6de590ad2acccbb5e28db97a0796899e88156b9df8b40706d`, clean report SHA-256 is `59771afb0e1419fbd17989e19ea857ee08bf69134fe8763ad54630326084e6fe`, and validation SHA-256 is `ed3c16038ca47db7575b0a1492592f28971624676906a9213168f4232bcdc708`. The stored run is `complete`, depth 3, `source_selection`, publishable `WARNING`, with 0 error blockers and 157 advisory `missing_source_id` warnings. The fresh v5 replay also produced a publishable `WARNING` with 0 blockers; its previous-draft comparison is publishable `WARNING` with 0 blockers.
+- Task 7 runtime evidence: the exact requested dot-reporter commands passed on Node 22.23.1 and Node 24.12.0, each with 561 tests, 561 pass, 0 fail. Full dot logs are under `out/task7-acceptance-20260909/node22-full.log` and `node24-full.log`; spec-reporter logs with counts are alongside them.
+
+### Acceptance-criterion coverage audit
+
+| AC | Named test or rollout check | Task 7 status |
+| ---: | --- | --- |
+| 1 | `weekly prepare validates sealed source-selection evidence before binding READY to file bytes` | Passed in both full suites |
+| 2 | `weekly prepare records collection exceptions and partial snapshots as collect_failed`; `weekly prepare records escaped provider failures as ai_failed`; `weekly prepare records escaped source-selection failures separately`; `weekly prepare records rejected validation with its validation and rejected report artifacts` | Passed in both full suites |
+| 3 | `weekly prepare records rejected validation with its validation and rejected report artifacts`; `v2 validation failure preserves the previous report and never retries Claude` | Passed in both full suites |
+| 4 | `weekly publish skips terminal states once without calls or artifacts`; `weekly publish CLI resolves terminal skips without credentials or new artifacts` | Passed in both full suites |
+| 5 | `weekly publish records incomplete attempts and never retries external writes`; `weekly publish rejects changed READY evidence before calling update` | Passed in both full suites |
+| 6 | `weekly publish verifies a stateful Wiki and preserves written failures without retry` (success case); `update exposes callback boundaries and returns the exact post-write server section` | Passed in both full suites |
+| 7 | `weekly publish verifies a stateful Wiki and preserves written failures without retry` (mismatch/verify failure cases); `weekly remote equality gates prior published bytes and completed-note closure` | Passed in both full suites |
+| 8 | `a new weekly attempt replaces only status.json and preserves the meeting directory`; `weekly failure destinations are immutable and a later attempt preserves prior evidence`; `weekly failure records immutable JSON and ordered Markdown with owned artifact hashes` | Passed in both full suites |
+| 9 | Exact Node 22.23.1 and Node 24.12.0 full-suite commands | 561/561 pass on each runtime |
+| 10 | `weekly wrappers apply fixed profiles after .env and preserve caller recovery paths`; `weekly wrapper failures alert once and terminal publish skips without another alert` | Passed in both full suites |
+| 11 | Canonical Task 7 offline replay; exact-string `wpa_supplicant 2.12-rc1/2.12` no-I/O validator check; latest saved v5 sealed snapshot and complete source-selection run; `depth 3 snapshots preserve source-grounded cause, fix, and verification details` | Passed by the recorded evidence split; no single historical sealed artifact contains both fixes |
+| 12 | Task 8 `local fake Redmine integration`, `production checkout`, `crontab backup/exact replacement`, and next-Wednesday `READY/PUBLISHED` rollout checks | Mapped; pending Task 8 and not claimed here |
+
+- Add review findings, PR URL, merge commit, cron backup path, and installed-cron verification during Task 8 execution only.
