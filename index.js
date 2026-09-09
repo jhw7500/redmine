@@ -75,6 +75,7 @@ const {
   patchWeeklyStatus,
   markWeeklyReady,
   recordWeeklyFailure,
+  redactWeeklyText,
   formatWeeklyFailureLog,
   runWeeklyPublish,
 } = require("./lib/weekly-pipeline");
@@ -289,7 +290,44 @@ function readyEvidenceError(message, cause) {
 }
 
 function prepareFailureArtifacts(outputDir, collectResult, generationResult, generationState) {
+  const thrownRunArtifacts = [];
+  // A thrown generation has no return value. Its explicit attempt identity must still
+  // own the persisted state before any diagnostic paths are retained.
+  if (generationResult && generationResult.attemptId) {
+    try {
+      generationState = JSON.parse(readPrepareEvidence(outputDir,
+        generationResult.generationStatePath, "weekly failed generation state"));
+      const snapshot = collectResult && collectResult.snapshot;
+      if (!snapshot || generationState.attemptId !== generationResult.attemptId
+        || generationState.snapshotHash !== snapshot.contentHash
+        || generationState.meetingDate !== snapshot.meetingDate) {
+        throw new Error("weekly failed generation ownership mismatch");
+      }
+      if (generationResult.runPaths) {
+        const ownedPaths = buildRunPaths(outputDir, snapshot.meetingDate, generationResult.attemptId);
+        if (generationState.runDir !== ownedPaths.runDir
+          || generationResult.runPaths.runDir !== ownedPaths.runDir) {
+          throw new Error("weekly failed generation run path mismatch");
+        }
+        const runState = JSON.parse(readPrepareEvidence(outputDir, ownedPaths.statePath,
+          "weekly failed run state"));
+        if (runState.attemptId !== generationResult.attemptId || runState.snapshotHash !== snapshot.contentHash) {
+          throw new Error("weekly failed run ownership mismatch");
+        }
+        for (const name of fs.readdirSync(ownedPaths.runDir)) {
+          if (/^(?:validation\.\d+\.json|report\.rejected\.\d+\.md|draft\.ai\.part\.\d+\.annotated\.md)$/.test(name)) {
+            thrownRunArtifacts.push(path.join(ownedPaths.runDir, name));
+          }
+        }
+        generationResult = { ...generationResult, runPaths: ownedPaths };
+      }
+    } catch {
+      generationResult = null;
+      generationState = null;
+    }
+  }
   const candidates = [
+    ...thrownRunArtifacts,
     collectResult && collectResult.snapshotPath,
     generationResult && generationResult.generationStatePath,
     generationResult && generationResult.reportPath,
@@ -311,10 +349,15 @@ function prepareFailureArtifacts(outputDir, collectResult, generationResult, gen
   }
   if (runPaths) {
     candidates.push(
+      runPaths.statePath,
+      runPaths.catalogPath,
+      runPaths.coverageCatalogPath,
       runPaths.promptInputPath,
       runPaths.aiDraftPath,
       runPaths.workingDraftPath,
-      runPaths.cleanReportPath
+      runPaths.cleanReportPath,
+      path.join(runPaths.runDir, "source-records.json"),
+      path.join(runPaths.runDir, "source-selection.json")
     );
     if (
       persistedGenerationState
@@ -481,7 +524,7 @@ async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
       artifacts: prepareFailureArtifacts(
         config.env.outputDir,
         collectResult,
-        generationResult,
+        generationResult || error.generationFailure,
         generationState
       ),
       redmineWriteAttempted: false,
@@ -1024,6 +1067,8 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       failedAt: new Date().toISOString(),
       errorCode: error && error.code ? error.code : "GENERATE_FAILED",
     });
+    error.generationFailure = { attemptId, generationStatePath,
+      runPaths: runInitialized ? runPaths : null };
     throw error;
   }
 }
@@ -1789,7 +1834,9 @@ module.exports = {
 // Weekly orchestration resolves these entry points lazily; export before CLI execution.
 if (require.main === module) {
   main().catch((error) => {
-    console.error(error);
+    if (!error.weeklyFailure) {
+      console.error(`[error] ${redactWeeklyText(error.message || "Command failed", 500).replace(/\s+/g, " ")}`);
+    }
     process.exitCode = 1;
   });
 }

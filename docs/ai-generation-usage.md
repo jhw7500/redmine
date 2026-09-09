@@ -158,7 +158,7 @@ OUTPUT_DIR=/absolute/path/source-selection-pilot node index.js
 - 정상 AI 응답은 JSON만 허용한다. 존재하지 않는 ID, 다른 카테고리의 ID, 중복, 누락된 섹션, 추가 문장·필드는 거부한다.
 - `LEADER_HIGHLIGHT`와 `LEADER_HIGHLIGHT_MAX`를 프롬프트 및 선택 검증에 적용한다. 강조가 꺼져 있거나 전체 선택의 강조 개수가 상한을 넘으면 잘못된 선택으로 처리한다. 상한 `0`은 기존 설정대로 무제한이다. 재검증·게시에서도 현재 강조 정책을 다시 검사한다.
 - 강조 대상 분야와 중요도는 `reportFilter.leaderHighlight.guidance`를 따른다. 안내가 비어 있으면 특정 분야로 제한하지 않고 주요 성과·이슈를 기본 기준으로 사용한다.
-- fallback은 실행 실패·timeout·quota·잘못된 선택 JSON에만 적용한다. AI 재호출 없이 각 canonical section에서 원문 등장 순서의 첫 2개 항목을 발췌하고 **원문 기반 대체 보고서**로 표시한다. 중요도 선별이나 여러 ETC 프로젝트의 균형은 보장하지 않는 축약 대체본이다.
+- fallback은 실행 실패·timeout·quota·잘못된 선택 JSON에만 적용한다. AI 재호출 없이 depth별 최소 목표(depth 1/2/3/4: 8/16/24/32개)까지 canonical section을 순회하며 원문 순서대로 한 항목씩 배분하고 **원문 기반 대체 보고서**로 표시한다. 섹션당 최대 9개이며, 전체 목표는 섹션 수 이상으로 잡되 실제 선택 가능량으로 제한한다. 각 섹션의 선택 항목은 최대 3개씩 묶는다. 중요도 선별이나 같은 ETC 섹션 안의 프로젝트별 균형은 보장하지 않는다.
 - 설정 오류, 입력 상한 초과, source-record 구성 실패, artifact 저장·소유권·검증 실패는 fallback 대상이 아니다. `SOURCE_SELECTION_FALLBACK=0`이면 선택 오류도 그대로 실패한다.
 - 수집 결과가 채워진 필수 카테고리에 원문 항목이 없으면 `SOURCE_RECORDS_INVALID`로 차단한다. 이를 원문에 없는 “특이사항 없음”으로 바꾸지 않는다. 실제 변경이 없는 카테고리(`(변경 없음)`)는 기존 coverage 규칙에 따라 필수 섹션에서 제외한다.
 - 원문에 없는 as-of 날짜나 완료 상태를 합성하지 않는다. 미해결·보류 등은 기존 git 제목 대조와 심볼 pickaxe 검사를 거치며, 근거 없는 상태는 날짜가 있어도 게시를 차단한다. 이 오류는 `VALIDATION_OVERRIDE`나 warn 설정으로 우회할 수 없다.
