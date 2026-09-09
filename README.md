@@ -141,6 +141,7 @@ Artifacts
 - `out/runs/YYYY-MM-DD/<run-id>/draft.ai.part.NNN.annotated.md`: `project` 모드의 파트별 변경 금지 AI 원본 출력. 중간 실패 시에도 완료된 파트까지 보존
 - `out/runs/YYYY-MM-DD/<run-id>/draft.working.annotated.md`: full marker로 확장된 실패 run 수동 복구 대상
 - `out/runs/YYYY-MM-DD/<run-id>/validation.NNN.json`: 덮어쓰지 않고 추가되는 검증 revision
+- `out/runs/YYYY-MM-DD/<run-id>/report.rejected.NNN.md`: validation revision `NNN`이 실패했을 때 marker를 제거해 보존하는 로컬 전용 생성물. 정식 초안 경로가 아니며 `MODE=update` 게시 대상이 아님
 - `out/runs/YYYY-MM-DD/<run-id>/report.clean.md`: marker가 제거된 검증 성공 보고서
 
 Source coverage contract (schema v2)
@@ -148,7 +149,7 @@ Source coverage contract (schema v2)
 - `N0001` 같은 `N` marker는 입력의 각 `[Notion]` bullet을 뜻한다. 요약에 남긴 Notion 항목은 marker를 원래 canonical path 안에 유지한다. 요약에서 제외된 item의 누락과 같은 path 안의 중복은 coverage warning/지표로 남지만 publish를 차단하지 않는다.
 - populated configured section의 누락·중복·잘못된 heading/path는 차단한다. unknown/malformed marker와 `N` marker의 다른 category 이동도 계속 차단한다.
 - coverage 적용 run은 `state.json`, 전역 `*.generation.json`, `prompt-input.json`, `validation.NNN.json`에 `sourceCoverageMode: "required_sections_notion_advisory_v2"`와 동일한 `coverageCatalogHash`를 기록한다. revalidate와 update는 이 값과 `source-coverage.json`의 hash 소유권을 대조한다.
-- coverage validation이 실패하면 같은 generate run에서 Claude를 다시 호출하지 않는다. `draft.ai.annotated.md`는 immutable 원본으로 남기고, 운영자는 **`draft.working.annotated.md`만** 수동 수정한 다음 `MODE=revalidate RUN_ID=<uuid>`를 실행한다.
+- coverage validation이 실패하면 같은 generate run에서 Claude를 다시 호출하지 않는다. `draft.ai.annotated.md`는 immutable 원본으로 남기고, marker 없는 실패본은 `report.rejected.NNN.md`로 보존한다. 실패 상태에서는 정식 `jo-hyunwoo-*.md`를 생성·교체하지 않으므로 `MODE=update` 게시도 차단된다. 운영자는 **`draft.working.annotated.md`만** 수동 수정한 다음 `MODE=revalidate RUN_ID=<uuid>`를 실행한다.
 - generate는 누락 `C` marker를 유일한 exact canonical heading에만 붙인다. 유일한 `C` marker가
   leaf heading 이름만 바꿨다면 부모 path와 들여쓰기가 원본과 일치할 때만 fact-annotated canonical
   heading으로 복원한다. 단, 교체할 heading 줄에 보호 사실이나 fact/source-like marker가 하나라도

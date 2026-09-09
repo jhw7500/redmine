@@ -358,6 +358,22 @@ function writeOwnedOrThrow(statePath, attemptId, patch) {
   }
 }
 
+function preserveRejectedReport(runPaths, revision, cleanContent) {
+  if (!Number.isInteger(revision) || revision < 1) {
+    throw new Error("rejected report requires a positive validation revision");
+  }
+  const filename = `report.rejected.${String(revision).padStart(3, "0")}.md`;
+  const rejectedReportPath = path.join(runPaths.runDir, filename);
+  writeImmutableArtifact(rejectedReportPath, cleanContent);
+  return {
+    rejectedReportPath,
+    state: {
+      latestRejectedReportPath: filename,
+      latestRejectedReportHash: sha256(cleanContent),
+    },
+  };
+}
+
 function markRecoverableRunFailure(runPaths, generationStatePath, attemptId, error) {
   const failedAt = new Date().toISOString();
   const errorCode = error && error.code ? error.code : "GENERATE_FAILED";
@@ -650,7 +666,15 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       }
 
       if (!result.validation.publishable) {
-        updateRunState(runPaths, attemptId, { status: "validation_failed" });
+        const rejected = preserveRejectedReport(
+          runPaths,
+          revision.revision,
+          result.cleanContent
+        );
+        updateRunState(runPaths, attemptId, {
+          status: "validation_failed",
+          ...rejected.state,
+        });
         writeOwnedOrThrow(generationStatePath, attemptId, {
           status: "failed",
           failedAt: new Date().toISOString(),
@@ -658,7 +682,9 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
           latestValidationPath,
           latestValidationHash: revision.validationHash,
           validationRevision: revision.revision,
+          ...rejected.state,
         });
+        console.error(`[validation] rejected report retained locally: ${rejected.rejectedReportPath}`);
         return {
           snapshot,
           snapshotPath,
@@ -666,6 +692,7 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
           generationStatePath,
           runPaths,
           validation: result.validation,
+          rejectedReportPath: rejected.rejectedReportPath,
         };
       }
 
@@ -867,15 +894,30 @@ async function runRevalidate(config, meetingDate) {
     const latestValidationPath = path.basename(revision.validationPath);
 
     if (!publishable) {
-      updateRunState(run.paths, run.state.attemptId, { status: "validation_failed" });
+      const rejected = preserveRejectedReport(
+        run.paths,
+        revision.revision,
+        result.cleanContent
+      );
+      updateRunState(run.paths, run.state.attemptId, {
+        status: "validation_failed",
+        ...rejected.state,
+      });
       writeOwnedOrThrow(generationStatePath, run.state.attemptId, {
         status: "failed",
         validationStatus: result.validation.status,
         latestValidationPath,
         latestValidationHash: revision.validationHash,
         validationRevision: revision.revision,
+        ...rejected.state,
       });
-      return { ...result, runPaths: run.paths, reportPath };
+      console.error(`[validation] rejected report retained locally: ${rejected.rejectedReportPath}`);
+      return {
+        ...result,
+        runPaths: run.paths,
+        reportPath,
+        rejectedReportPath: rejected.rejectedReportPath,
+      };
     }
 
     promoteRunReport({

@@ -168,6 +168,8 @@ OUTPUT_DIR=/absolute/path/source-selection-pilot node index.js
 
 새 run에는 `source-records.json`, `source-selection.json`이 추가된다. 선택 origin(`ai`/`deterministic_fallback`), 실패 코드, 응답 수신 여부, hash를 기록한다. `draft.ai.annotated.md`는 이 방식에서 Markdown이 아니라 **provider stdout 원문**이다. UTF-8 스트림 디코딩으로 여러 조각에 나뉜 문자를 보존한다. 부분 응답 후 실패해도 보존하고, 실행조차 못 했으면 빈 파일과 `aiResponseReceived:false`로 구분한다.
 
+검증이 실패해도 사람이 읽을 수 있는 marker 제거본을 run 안의 `report.rejected.NNN.md`로 차수별 보존한다. 이 파일은 로컬 진단 전용이며 정식 `jo-hyunwoo-*.md` 경로로 승격되지 않는다. 전역 generation state와 run state도 계속 실패로 남기 때문에 `MODE=update`는 Redmine API 호출 전에 거부한다. 재검증이 다시 실패하면 기존 파일을 덮어쓰지 않고 다음 차수 파일을 추가한다.
+
 재검증·게시 단계는 snapshot + 저장된 카탈로그로 원문 레코드와 보고서를 다시 만들어 동일성을 확인한다. `draft.working.annotated.md`를 임의로 고쳐 통과시키는 복구는 허용하지 않는다. 원본 근거를 바로잡아 새 snapshot/run을 생성하거나, 코드 오류를 수정한 뒤 기존 증거를 그대로 재검증한다. `freeform`의 기존 수동 복구 경로는 유지한다.
 
 ### AI 없이 과거 snapshot 재생
