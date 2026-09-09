@@ -69,6 +69,7 @@ const {
 } = require("./lib/publisher");
 const { stripAstralChars } = require("./lib/text-normalization");
 const {
+  formatWeeklyPrepareRetryCommand,
   buildWeeklyPipelinePaths,
   createWeeklyAttempt,
   patchWeeklyStatus,
@@ -485,7 +486,7 @@ async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
       ),
       redmineWriteAttempted: false,
       serverState: "unchanged",
-      retryCommand: `MODE=weekly-prepare MEETING_DATE=${meetingDateText} node index.js`,
+      retryCommand: formatWeeklyPrepareRetryCommand(meetingDateText),
       now,
     });
     console.error(formatWeeklyFailureLog(recorded.failure, recorded.markdownPath));
