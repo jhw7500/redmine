@@ -30,6 +30,7 @@ const {
   sha256,
   hashObject,
   writeJsonAtomic,
+  writeTextAtomic,
 } = require("./lib/report-artifact");
 const { collectSnapshot, loadSnapshot } = require("./lib/report-snapshot");
 const { pruneRunArtifacts } = require("./lib/report-run-pruner");
@@ -253,7 +254,7 @@ function assertWeeklyProfile(config, mode) {
   }
 }
 
-function readPrepareEvidence(outputDir, filePath, label) {
+function readPrepareEvidence(outputDir, filePath, label, encoding = "utf8") {
   if (typeof filePath !== "string" || !path.isAbsolute(filePath)) {
     throw new Error(`${label} must be an absolute path`);
   }
@@ -270,7 +271,7 @@ function readPrepareEvidence(outputDir, filePath, label) {
     if (stats.isSymbolicLink()) throw new Error(`${label} path must not contain a symlink`);
   }
   if (!fs.statSync(resolvedPath).isFile()) throw new Error(`${label} must be a regular file`);
-  return fs.readFileSync(resolvedPath, "utf8");
+  return fs.readFileSync(resolvedPath, encoding);
 }
 
 function readyEvidenceError(message, cause) {
@@ -279,7 +280,7 @@ function readyEvidenceError(message, cause) {
   return error;
 }
 
-function prepareFailureArtifacts(collectResult, generationResult, generationState) {
+function prepareFailureArtifacts(outputDir, collectResult, generationResult, generationState) {
   const candidates = [
     collectResult && collectResult.snapshotPath,
     generationResult && generationResult.generationStatePath,
@@ -288,6 +289,18 @@ function prepareFailureArtifacts(collectResult, generationResult, generationStat
     generationResult && generationResult.rejectedReportPath,
   ];
   const runPaths = generationResult && generationResult.runPaths;
+  let persistedGenerationState = generationState;
+  if (!persistedGenerationState && generationResult && generationResult.generationStatePath) {
+    try {
+      persistedGenerationState = JSON.parse(readPrepareEvidence(
+        outputDir,
+        generationResult.generationStatePath,
+        "weekly generation state"
+      ));
+    } catch (error) {
+      persistedGenerationState = null;
+    }
+  }
   if (runPaths) {
     candidates.push(
       runPaths.promptInputPath,
@@ -295,11 +308,21 @@ function prepareFailureArtifacts(collectResult, generationResult, generationStat
       runPaths.workingDraftPath,
       runPaths.cleanReportPath
     );
-    if (generationState && generationState.latestValidationPath) {
-      candidates.push(path.join(runPaths.runDir, generationState.latestValidationPath));
+    if (
+      persistedGenerationState
+      && typeof persistedGenerationState.latestValidationPath === "string"
+      && path.basename(persistedGenerationState.latestValidationPath)
+        === persistedGenerationState.latestValidationPath
+    ) {
+      candidates.push(path.join(runPaths.runDir, persistedGenerationState.latestValidationPath));
     }
-    if (generationState && generationState.latestRejectedReportPath) {
-      candidates.push(path.join(runPaths.runDir, generationState.latestRejectedReportPath));
+    if (
+      persistedGenerationState
+      && typeof persistedGenerationState.latestRejectedReportPath === "string"
+      && path.basename(persistedGenerationState.latestRejectedReportPath)
+        === persistedGenerationState.latestRejectedReportPath
+    ) {
+      candidates.push(path.join(runPaths.runDir, persistedGenerationState.latestRejectedReportPath));
     }
   }
   return candidates.filter((candidate) => typeof candidate === "string");
@@ -327,6 +350,8 @@ async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
   let generationResult;
   let generationState;
   let validation;
+  let canonicalBeforeGeneration;
+  let generationReturned = false;
 
   try {
     collectResult = await collect(config, meetingDate);
@@ -338,7 +363,18 @@ async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
 
     state = patchWeeklyStatus(paths, attemptId, { stage: "generate" });
     stage = "generate";
+    const canonicalReportPath = path.resolve(buildOutputPath(meetingDate, config));
+    canonicalBeforeGeneration = fs.existsSync(canonicalReportPath) ? {
+      path: canonicalReportPath,
+      bytes: readPrepareEvidence(
+        config.env.outputDir,
+        canonicalReportPath,
+        "weekly canonical report",
+        null
+      ),
+    } : null;
     generationResult = await generateReport(config, meetingDate);
+    generationReturned = true;
 
     state = patchWeeklyStatus(paths, attemptId, { stage: "validate" });
     stage = "validate";
@@ -425,13 +461,21 @@ async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
     return { state, collectResult, generationResult };
   } catch (error) {
     const failureStage = error && error.code === "ready_evidence_mismatch" ? "publish" : stage;
+    if (generationReturned && canonicalBeforeGeneration) {
+      writeTextAtomic(canonicalBeforeGeneration.path, canonicalBeforeGeneration.bytes);
+    }
     const recorded = recordWeeklyFailure({
       paths,
       state,
       stage: failureStage,
       error,
       validation,
-      artifacts: prepareFailureArtifacts(collectResult, generationResult, generationState),
+      artifacts: prepareFailureArtifacts(
+        config.env.outputDir,
+        collectResult,
+        generationResult,
+        generationState
+      ),
       redmineWriteAttempted: false,
       serverState: "unchanged",
       retryCommand: `MODE=weekly-prepare MEETING_DATE=${meetingDateText} node index.js`,
