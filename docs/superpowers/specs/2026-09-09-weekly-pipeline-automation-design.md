@@ -208,6 +208,10 @@ prepare가 실패했을 때는 이미 prepare 크론이 원인과 알림을 남�
 skip한다. prepare 자체가 실행되지 않았거나 상태 기록 전에 강제 종료된 경우에는 publish가
 이를 새로운 `prepare_incomplete` 장애로 보고한다.
 
+생성 완료 후 READY 증거 검증이 실패하면 canonical 보고서를 실행 전 상태로 되돌린다.
+기존 보고서가 없던 첫 실행은 새 canonical 파일만 제거하며, run 안의 clean 보고서·AI 초안·
+검증 자료는 장애 증거와 함께 보존한다. 따라서 일반 `update`로 실패한 prepare를 우회 게시할 수 없다.
+
 PUT 뒤에는 같은 wiki JSON을 다시 GET하고 `extractSection()`으로 조현우 섹션을 추출한다.
 게시 직전 조회와 게시 후 재조회 모두 양의 정수 Wiki version 및 유효한 `updated_on` 시각을
 요구한다. 값이 없거나 잘못되면 PUT 또는 게시 성공 처리를 차단하며, 본문 변경이 없는 경우도
@@ -221,6 +225,9 @@ PUT 뒤에는 같은 wiki JSON을 다시 GET하고 `extractSection()`으로 조�
 한다. 개별 노트 조회·본문 로딩·생성 실패를 건너뛰지 않고 Wiki 게시 전에 전파한다. Issue POST가
 이미 시도된 뒤 실패하면 `serverState=written_unverified`를 남기고, 실패한 publish 재호출은
 외부 작업을 반복하지 않는다. 독립 발표노트 CLI의 기존 best-effort 모드는 유지한다.
+노트 생성이 성공 반환한 뒤에도 후속 Wiki 조회·READY 재검증 실패까지 쓰기 증거를 전달한다.
+새 이슈가 하나라도 생성됐으면 `written_unverified`, 기존 이슈만 재사용했다면 쓰기 전 실패는
+`unchanged`로 기록한다.
 Wiki 게시 뒤 발표완료 종료의 best-effort 정책은 본 설계의 성공 판정에 포함하지 않는다.
 
 ## 크론 전환

@@ -441,15 +441,15 @@ async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
     state = patchWeeklyStatus(paths, attemptId, { stage: "generate" });
     stage = "generate";
     const canonicalReportPath = path.resolve(buildOutputPath(meetingDate, config));
-    canonicalBeforeGeneration = fs.existsSync(canonicalReportPath) ? {
+    canonicalBeforeGeneration = {
       path: canonicalReportPath,
-      bytes: readPrepareEvidence(
+      bytes: fs.existsSync(canonicalReportPath) ? readPrepareEvidence(
         config.env.outputDir,
         canonicalReportPath,
         "weekly canonical report",
         null
-      ),
-    } : null;
+      ) : null,
+    };
     generationResult = await generateReport(config, meetingDate);
     generationReturned = true;
 
@@ -542,7 +542,14 @@ async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
       collectResult = recoverCollectedSnapshot(config, meetingDate, error.collectionFailure);
     }
     if (generationReturned && canonicalBeforeGeneration) {
-      writeTextAtomic(canonicalBeforeGeneration.path, canonicalBeforeGeneration.bytes);
+      if (canonicalBeforeGeneration.bytes !== null) {
+        writeTextAtomic(canonicalBeforeGeneration.path, canonicalBeforeGeneration.bytes);
+      } else if (fs.existsSync(canonicalBeforeGeneration.path)) {
+        // The run retains its drafts, clean report and validation. Only undo the
+        // new canonical promotion so ordinary update cannot publish this failed prepare.
+        readPrepareEvidence(config.env.outputDir, canonicalBeforeGeneration.path, "weekly failed canonical report");
+        fs.unlinkSync(canonicalBeforeGeneration.path);
+      }
     }
     const recorded = recordWeeklyFailure({
       paths,
@@ -1745,6 +1752,7 @@ async function runUpdate(config, meetingDate, options = {}) {
     );
     if (notice) console.warn(notice);
   }
+  let presentationNotesWritten = false;
   const loadNoteRefs = candidates.length
     ? async () => {
       const previewRefs = candidates.map((candidate, index) => ({
@@ -1756,6 +1764,7 @@ async function runUpdate(config, meetingDate, options = {}) {
         throw new Error("발표노트 Issue 생성에 NOTION_API_KEY가 필요합니다.");
       }
       const refs = await publishNotes(buildIssueEnv(config), candidates, { assertReady, requireAll: true });
+      presentationNotesWritten = refs.some((ref) => ref.reused === false);
       console.log(`[issue] presentation notes: ${refs.length}`);
       return refs;
     }
@@ -1770,6 +1779,11 @@ async function runUpdate(config, meetingDate, options = {}) {
     onBeforeExternalWrite: options.onBeforeExternalWrite,
     onFinalSection: options.onFinalSection,
     verifyRemote: options.verifyRemote,
+  }).catch((error) => {
+    // A later Wiki read or READY check can fail after note creation has returned.
+    // Keep that write evidence even though no Wiki PUT has been attempted yet.
+    if (presentationNotesWritten) error.serverState = "written_unverified";
+    throw error;
   });
   // 발표완료 태그가 붙은 노트의 이슈를 종료한다. 게시가 끝난 뒤에만 수행하고,
   // 종료 실패가 주간 게시를 되돌리지 않도록 여기서 삼킨다.
