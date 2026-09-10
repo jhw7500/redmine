@@ -158,7 +158,7 @@ OUTPUT_DIR=/absolute/path/source-selection-pilot node index.js
 - 정상 AI 응답은 JSON만 허용한다. 존재하지 않는 ID, 다른 카테고리의 ID, 중복, 누락된 섹션, 추가 문장·필드는 거부한다.
 - `LEADER_HIGHLIGHT`와 `LEADER_HIGHLIGHT_MAX`를 프롬프트 및 선택 검증에 적용한다. 강조가 꺼져 있거나 전체 선택의 강조 개수가 상한을 넘으면 잘못된 선택으로 처리한다. 상한 `0`은 기존 설정대로 무제한이다. 재검증·게시에서도 현재 강조 정책을 다시 검사한다.
 - 강조 대상 분야와 중요도는 `reportFilter.leaderHighlight.guidance`를 따른다. 안내가 비어 있으면 특정 분야로 제한하지 않고 주요 성과·이슈를 기본 기준으로 사용한다.
-- fallback은 실행 실패·timeout·quota·잘못된 선택 JSON에만 적용한다. AI 재호출 없이 각 canonical section에서 원문 등장 순서의 첫 2개 항목을 발췌하고 **원문 기반 대체 보고서**로 표시한다. 중요도 선별이나 여러 ETC 프로젝트의 균형은 보장하지 않는 축약 대체본이다.
+- fallback은 실행 실패·timeout·quota·잘못된 선택 JSON에만 적용한다. AI 재호출 없이 depth별 최소 목표(depth 1/2/3/4: 8/16/24/32개)까지 canonical section을 순회하며 원문 순서대로 한 항목씩 배분하고 **원문 기반 대체 보고서**로 표시한다. 섹션당 최대 9개이며, 전체 목표는 섹션 수 이상으로 잡되 실제 선택 가능량으로 제한한다. 각 섹션의 선택 항목은 최대 3개씩 묶는다. 중요도 선별이나 같은 ETC 섹션 안의 프로젝트별 균형은 보장하지 않는다.
 - 설정 오류, 입력 상한 초과, source-record 구성 실패, artifact 저장·소유권·검증 실패는 fallback 대상이 아니다. `SOURCE_SELECTION_FALLBACK=0`이면 선택 오류도 그대로 실패한다.
 - 수집 결과가 채워진 필수 카테고리에 원문 항목이 없으면 `SOURCE_RECORDS_INVALID`로 차단한다. 이를 원문에 없는 “특이사항 없음”으로 바꾸지 않는다. 실제 변경이 없는 카테고리(`(변경 없음)`)는 기존 coverage 규칙에 따라 필수 섹션에서 제외한다.
 - 원문에 없는 as-of 날짜나 완료 상태를 합성하지 않는다. 미해결·보류 등은 기존 git 제목 대조와 심볼 pickaxe 검사를 거치며, 근거 없는 상태는 날짜가 있어도 게시를 차단한다. 이 오류는 `VALIDATION_OVERRIDE`나 warn 설정으로 우회할 수 없다.
@@ -167,6 +167,8 @@ OUTPUT_DIR=/absolute/path/source-selection-pilot node index.js
 - 원문 목록은 `-`·`*`·`+`를 지원한다. 일반 카테고리 바로 아래의 `개선` 등 기본 커밋 유형 헤딩만 조건 문단이 없을 때 중복 렌더링하지 않는다. ETC의 프로젝트명(`기타` 포함)과 더 깊은 의미 문맥은 보존한다. GLIBC·wpa_supplicant 버전은 `2.12-rc1`, `2.12b`, `2.12+build.7` 같은 접미사까지 하나의 사실로 보호한다.
 
 새 run에는 `source-records.json`, `source-selection.json`이 추가된다. 선택 origin(`ai`/`deterministic_fallback`), 실패 코드, 응답 수신 여부, hash를 기록한다. `draft.ai.annotated.md`는 이 방식에서 Markdown이 아니라 **provider stdout 원문**이다. UTF-8 스트림 디코딩으로 여러 조각에 나뉜 문자를 보존한다. 부분 응답 후 실패해도 보존하고, 실행조차 못 했으면 빈 파일과 `aiResponseReceived:false`로 구분한다.
+
+검증이 실패해도 사람이 읽을 수 있는 marker 제거본을 run 안의 `report.rejected.NNN.md`로 차수별 보존한다. 이 파일은 로컬 진단 전용이며 정식 `jo-hyunwoo-*.md` 경로로 승격되지 않는다. 전역 generation state와 run state도 계속 실패로 남기 때문에 `MODE=update`는 Redmine API 호출 전에 거부한다. 재검증이 다시 실패하면 기존 파일을 덮어쓰지 않고 다음 차수 파일을 추가한다.
 
 재검증·게시 단계는 snapshot + 저장된 카탈로그로 원문 레코드와 보고서를 다시 만들어 동일성을 확인한다. `draft.working.annotated.md`를 임의로 고쳐 통과시키는 복구는 허용하지 않는다. 원본 근거를 바로잡아 새 snapshot/run을 생성하거나, 코드 오류를 수정한 뒤 기존 증거를 그대로 재검증한다. `freeform`의 기존 수동 복구 경로는 유지한다.
 

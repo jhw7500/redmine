@@ -3,6 +3,22 @@ set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 _requested_mode="${MODE:-}"
+_requested_weekly_profile="${REDMINE_WEEKLY_PROFILE:-}"
+_requested_meeting_date_set=0
+_requested_output_dir_set=0
+_requested_snapshot_path_set=0
+if [[ ${MEETING_DATE+x} ]]; then
+  _requested_meeting_date_set=1
+  _requested_meeting_date=$MEETING_DATE
+fi
+if [[ ${OUTPUT_DIR+x} ]]; then
+  _requested_output_dir_set=1
+  _requested_output_dir=$OUTPUT_DIR
+fi
+if [[ ${SNAPSHOT_PATH+x} ]]; then
+  _requested_snapshot_path_set=1
+  _requested_snapshot_path=$SNAPSHOT_PATH
+fi
 
 if [[ -f "$ROOT/.env" ]]; then
   set -a
@@ -17,6 +33,57 @@ else
   export MODE="${MODE:-generate}"
 fi
 unset _requested_mode
+
+if [[ -n "$_requested_weekly_profile" ]]; then
+  _weekly_profile=$_requested_weekly_profile
+else
+  _weekly_profile=${REDMINE_WEEKLY_PROFILE:-}
+fi
+unset _requested_weekly_profile
+
+case $_weekly_profile in
+  "")
+    ;;
+  prepare)
+    export AI_SUMMARIZE=1
+    export AI_PROVIDER=codex
+    export AI_MODEL=gpt-5.6-sol
+    export AI_EFFORT=low
+    export AI_GENERATION_METHOD=source_selection
+    export AI_GENERATION_SCOPE=whole
+    export SOURCE_SELECTION_FALLBACK=1
+    export REPORT_DEPTH=3
+    export VALIDATION_MODE=block
+    export VALIDATION_OVERRIDE=0
+    export PRESENTATION_NOTE_MODE=suggest
+    ;;
+  publish)
+    export AUTO_APPROVE=1
+    export REPORT_DEPTH=3
+    export VALIDATION_MODE=block
+    export VALIDATION_OVERRIDE=0
+    export PRESENTATION_NOTE_MODE=suggest
+    ;;
+  *)
+    echo "unknown weekly profile: $_weekly_profile" >&2
+    exit 64
+    ;;
+esac
+
+if [[ -n "$_weekly_profile" ]]; then
+  if [[ $_requested_meeting_date_set -eq 1 ]]; then
+    export MEETING_DATE="$_requested_meeting_date"
+  fi
+  if [[ $_requested_output_dir_set -eq 1 ]]; then
+    export OUTPUT_DIR="$_requested_output_dir"
+  fi
+  if [[ $_requested_snapshot_path_set -eq 1 ]]; then
+    export SNAPSHOT_PATH="$_requested_snapshot_path"
+  fi
+fi
+unset REDMINE_WEEKLY_PROFILE _weekly_profile
+unset _requested_meeting_date_set _requested_output_dir_set _requested_snapshot_path_set
+unset _requested_meeting_date _requested_output_dir _requested_snapshot_path 2>/dev/null || true
 
 # NOTION_API_KEY는 ~/.bashrc를 single source of truth로 사용한다.
 # 해당 줄을 eval 로 실행하지는 않는다 — .bashrc 한 줄에 다른 명령이 이어 붙어 있으면

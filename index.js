@@ -26,10 +26,13 @@ const {
   buildCandidatesPath,
   buildGenerationStatePath,
   buildPublishedPath,
+  buildSnapshotPath,
   buildValidationPath,
   sha256,
   hashObject,
+  verifySnapshot,
   writeJsonAtomic,
+  writeTextAtomic,
 } = require("./lib/report-artifact");
 const { collectSnapshot, loadSnapshot } = require("./lib/report-snapshot");
 const { pruneRunArtifacts } = require("./lib/report-run-pruner");
@@ -67,6 +70,17 @@ const {
   update,
 } = require("./lib/publisher");
 const { stripAstralChars } = require("./lib/text-normalization");
+const {
+  formatWeeklyPrepareRetryCommand,
+  buildWeeklyPipelinePaths,
+  createWeeklyAttempt,
+  patchWeeklyStatus,
+  markWeeklyReady,
+  recordWeeklyFailure,
+  redactWeeklyText,
+  formatWeeklyFailureLog,
+  runWeeklyPublish,
+} = require("./lib/weekly-pipeline");
 const { validateV2ReportContract } = require("./lib/report-contract");
 const { buildGenerationPlan } = require("./lib/report-generation-plan");
 const { buildSourceRecords, buildSelectionPrompt } = require("./lib/source-selection");
@@ -212,13 +226,352 @@ function assertPublishable(validation, config) {
 
 async function runCollect(config, meetingDate) {
   const result = await collectSnapshot(config, meetingDate);
-  writeCandidates(result.snapshot, result.snapshotPath, meetingDate, config);
-  if (result.snapshot.status !== "sealed" && !config.env.allowPartialSnapshot) {
-    throw new Error(
-      `수집 snapshot이 ${result.snapshot.status} 상태입니다: ${result.snapshot.failures.join("; ")}`
-    );
+  try {
+    writeCandidates(result.snapshot, result.snapshotPath, meetingDate, config);
+    if (result.snapshot.status !== "sealed" && !config.env.allowPartialSnapshot) {
+      throw Object.assign(new Error(
+        `수집 snapshot이 ${result.snapshot.status} 상태입니다: ${result.snapshot.failures.join("; ")}`
+      ), { code: "COLLECT_PARTIAL" });
+    }
+  } catch (error) {
+    error.collectionFailure = {
+      snapshotPath: result.snapshotPath,
+      snapshotHash: result.snapshot.contentHash,
+      meetingDate: result.snapshot.meetingDate,
+    };
+    throw error;
   }
   return result;
+}
+
+function assertWeeklyProfile(config, mode) {
+  if (!["weekly-prepare", "weekly-publish"].includes(mode)) return;
+  const env = config && config.env;
+  const expected = mode === "weekly-publish" ? {
+    autoApprove: true,
+    reportDepth: 3,
+    validationMode: "block",
+    validationOverride: false,
+    presentationNoteMode: "suggest",
+  } : {
+    aiSummarize: true,
+    aiProvider: "codex",
+    aiModel: "gpt-5.6-sol",
+    aiEffort: "low",
+    aiGenerationMethod: "source_selection",
+    aiGenerationScope: "whole",
+    sourceSelectionFallback: true,
+    reportDepth: 3,
+    validationMode: "block",
+    validationOverride: false,
+    presentationNoteMode: "suggest",
+  };
+  if (!env) throw new Error("[weekly] configuration is required");
+  for (const [field, value] of Object.entries(expected)) {
+    if (env[field] !== value) {
+      throw new Error(`[weekly] ${mode} requires ${field}=${value}`);
+    }
+  }
+}
+
+function readPrepareEvidence(outputDir, filePath, label, encoding = "utf8") {
+  if (typeof filePath !== "string" || !path.isAbsolute(filePath)) {
+    throw new Error(`${label} must be an absolute path`);
+  }
+  const outputRoot = path.resolve(outputDir);
+  const resolvedPath = path.resolve(filePath);
+  const relative = path.relative(outputRoot, resolvedPath);
+  if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`${label} escapes configured output directory`);
+  }
+  let cursor = outputRoot;
+  for (const segment of relative.split(path.sep)) {
+    cursor = path.join(cursor, segment);
+    const stats = fs.lstatSync(cursor);
+    if (stats.isSymbolicLink()) throw new Error(`${label} path must not contain a symlink`);
+  }
+  if (!fs.statSync(resolvedPath).isFile()) throw new Error(`${label} must be a regular file`);
+  return fs.readFileSync(resolvedPath, encoding);
+}
+
+function readyEvidenceError(message, cause) {
+  const error = new Error(message, cause ? { cause } : undefined);
+  error.code = "ready_evidence_mismatch";
+  return error;
+}
+
+function recoverCollectedSnapshot(config, meetingDate, failure) {
+  if (!failure || failure.meetingDate !== formatDate(meetingDate)) return null;
+  try {
+    const snapshotPath = path.resolve(buildSnapshotPath(meetingDate, config));
+    if (failure.snapshotPath !== snapshotPath) return null;
+    const snapshot = verifySnapshot(JSON.parse(readPrepareEvidence(
+      config.env.outputDir, snapshotPath, "weekly failed collection snapshot"
+    )));
+    if (snapshot.meetingDate !== failure.meetingDate || snapshot.contentHash !== failure.snapshotHash) return null;
+    return { snapshotPath, snapshot };
+  } catch {
+    return null;
+  }
+}
+
+function prepareFailureArtifacts(outputDir, collectResult, generationResult, generationState) {
+  const thrownRunArtifacts = [];
+  // A thrown generation has no return value. Its explicit attempt identity must still
+  // own the persisted state before any diagnostic paths are retained.
+  if (generationResult && generationResult.attemptId) {
+    try {
+      generationState = JSON.parse(readPrepareEvidence(outputDir,
+        generationResult.generationStatePath, "weekly failed generation state"));
+      const snapshot = collectResult && collectResult.snapshot;
+      if (!snapshot || generationState.attemptId !== generationResult.attemptId
+        || generationState.snapshotHash !== snapshot.contentHash
+        || generationState.meetingDate !== snapshot.meetingDate) {
+        throw new Error("weekly failed generation ownership mismatch");
+      }
+      if (generationResult.runPaths) {
+        const ownedPaths = buildRunPaths(outputDir, snapshot.meetingDate, generationResult.attemptId);
+        if (generationState.runDir !== ownedPaths.runDir
+          || generationResult.runPaths.runDir !== ownedPaths.runDir) {
+          throw new Error("weekly failed generation run path mismatch");
+        }
+        const runState = JSON.parse(readPrepareEvidence(outputDir, ownedPaths.statePath,
+          "weekly failed run state"));
+        if (runState.attemptId !== generationResult.attemptId || runState.snapshotHash !== snapshot.contentHash) {
+          throw new Error("weekly failed run ownership mismatch");
+        }
+        for (const name of fs.readdirSync(ownedPaths.runDir)) {
+          if (/^(?:validation\.\d+\.json|report\.rejected\.\d+\.md|draft\.ai\.part\.\d+\.annotated\.md)$/.test(name)) {
+            thrownRunArtifacts.push(path.join(ownedPaths.runDir, name));
+          }
+        }
+        generationResult = { ...generationResult, runPaths: ownedPaths };
+      }
+    } catch {
+      generationResult = null;
+      generationState = null;
+    }
+  }
+  const candidates = [
+    ...thrownRunArtifacts,
+    collectResult && collectResult.snapshotPath,
+    generationResult && generationResult.generationStatePath,
+    generationResult && generationResult.reportPath,
+    generationResult && generationResult.validationPath,
+    generationResult && generationResult.rejectedReportPath,
+  ];
+  const runPaths = generationResult && generationResult.runPaths;
+  let persistedGenerationState = generationState;
+  if (!persistedGenerationState && generationResult && generationResult.generationStatePath) {
+    try {
+      persistedGenerationState = JSON.parse(readPrepareEvidence(
+        outputDir,
+        generationResult.generationStatePath,
+        "weekly generation state"
+      ));
+    } catch (error) {
+      persistedGenerationState = null;
+    }
+  }
+  if (runPaths) {
+    candidates.push(
+      runPaths.statePath,
+      runPaths.catalogPath,
+      runPaths.coverageCatalogPath,
+      runPaths.promptInputPath,
+      runPaths.aiDraftPath,
+      runPaths.workingDraftPath,
+      runPaths.cleanReportPath,
+      path.join(runPaths.runDir, "source-records.json"),
+      path.join(runPaths.runDir, "source-selection.json")
+    );
+    if (
+      persistedGenerationState
+      && typeof persistedGenerationState.latestValidationPath === "string"
+      && path.basename(persistedGenerationState.latestValidationPath)
+        === persistedGenerationState.latestValidationPath
+    ) {
+      candidates.push(path.join(runPaths.runDir, persistedGenerationState.latestValidationPath));
+    }
+    if (
+      persistedGenerationState
+      && typeof persistedGenerationState.latestRejectedReportPath === "string"
+      && path.basename(persistedGenerationState.latestRejectedReportPath)
+        === persistedGenerationState.latestRejectedReportPath
+    ) {
+      candidates.push(path.join(runPaths.runDir, persistedGenerationState.latestRejectedReportPath));
+    }
+  }
+  return candidates.filter((candidate) => typeof candidate === "string");
+}
+
+async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
+  assertWeeklyProfile(config, "weekly-prepare");
+  const collect = dependencies.runCollect || runCollect;
+  const generateReport = dependencies.runGenerate || runGenerate;
+  const validateEvidence = dependencies.assertV2PublishEvidence || assertV2PublishEvidence;
+  const randomUUID = dependencies.randomUUID || crypto.randomUUID;
+  const now = dependencies.now || (() => new Date().toISOString());
+  const meetingDateText = formatDate(meetingDate);
+  const paths = buildWeeklyPipelinePaths(config.env.outputDir, meetingDateText);
+  const attemptId = randomUUID();
+  let state = createWeeklyAttempt({
+    outputDir: config.env.outputDir,
+    meetingDate: meetingDateText,
+    reportDepth: 3,
+    attemptId,
+    now,
+  });
+  let stage = "collect";
+  let collectResult;
+  let generationResult;
+  let generationState;
+  let validation;
+  let canonicalBeforeGeneration;
+  let generationReturned = false;
+
+  try {
+    collectResult = await collect(config, meetingDate);
+    if (!collectResult || !collectResult.snapshot || collectResult.snapshot.status !== "sealed") {
+      const error = new Error("weekly prepare requires a sealed collection snapshot");
+      error.code = "COLLECT_PARTIAL";
+      throw error;
+    }
+
+    state = patchWeeklyStatus(paths, attemptId, { stage: "generate" });
+    stage = "generate";
+    const canonicalReportPath = path.resolve(buildOutputPath(meetingDate, config));
+    canonicalBeforeGeneration = {
+      path: canonicalReportPath,
+      bytes: fs.existsSync(canonicalReportPath) ? readPrepareEvidence(
+        config.env.outputDir,
+        canonicalReportPath,
+        "weekly canonical report",
+        null
+      ) : null,
+    };
+    generationResult = await generateReport(config, meetingDate);
+    generationReturned = true;
+
+    state = patchWeeklyStatus(paths, attemptId, { stage: "validate" });
+    stage = "validate";
+    validation = generationResult && generationResult.validation;
+    if (!validation || validation.schemaVersion !== 2 || !isPublishable(validation)) {
+      const error = new Error("weekly generation returned non-publishable validation");
+      error.code = "VALIDATION_FAILED";
+      throw error;
+    }
+
+    let snapshotPath;
+    let generationStatePath;
+    let reportPath;
+    let snapshotText;
+    let generationStateText;
+    let reportContent;
+    let snapshot;
+    try {
+      snapshotPath = path.resolve(collectResult.snapshotPath);
+      generationStatePath = path.resolve(generationResult.generationStatePath);
+      reportPath = path.resolve(generationResult.reportPath);
+      snapshotText = readPrepareEvidence(config.env.outputDir, snapshotPath, "weekly snapshot");
+      generationStateText = readPrepareEvidence(
+        config.env.outputDir,
+        generationStatePath,
+        "weekly generation state"
+      );
+      reportContent = readPrepareEvidence(config.env.outputDir, reportPath, "weekly report");
+      generationState = JSON.parse(generationStateText);
+      snapshot = JSON.parse(snapshotText);
+      if (
+        snapshot.status !== "sealed"
+        || snapshot.contentHash !== collectResult.snapshot.contentHash
+        || generationState.schemaVersion !== 2
+        || generationState.status !== "complete"
+        || generationState.generationMethod !== "source_selection"
+        || generationState.reportDepth !== 3
+      ) {
+        throw new Error("weekly READY evidence metadata mismatch");
+      }
+    } catch (error) {
+      throw readyEvidenceError("weekly READY evidence is missing or invalid", error);
+    }
+
+    try {
+      const evidence = validateEvidence({
+        state: generationState,
+        reportContent,
+        snapshot,
+        meetingDate,
+        config,
+      });
+      if (!evidence || !isPublishable(evidence.validation)) {
+        throw new Error("latest validation is not publishable");
+      }
+      if (
+        readPrepareEvidence(config.env.outputDir, snapshotPath, "weekly snapshot") !== snapshotText
+        || readPrepareEvidence(
+          config.env.outputDir,
+          generationStatePath,
+          "weekly generation state"
+        ) !== generationStateText
+        || readPrepareEvidence(config.env.outputDir, reportPath, "weekly report") !== reportContent
+      ) {
+        throw new Error("weekly READY evidence changed after validation");
+      }
+    } catch (error) {
+      throw readyEvidenceError("weekly READY evidence validation failed", error);
+    }
+
+    stage = "publish";
+    try {
+      state = markWeeklyReady(paths, attemptId, {
+        snapshotPath,
+        snapshotHash: snapshot.contentHash,
+        generationAttemptId: generationState.attemptId,
+        generationStatePath,
+        reportPath,
+        reportHash: sha256(reportContent),
+      });
+    } catch (error) {
+      throw readyEvidenceError("weekly READY evidence could not be bound", error);
+    }
+    return { state, collectResult, generationResult };
+  } catch (error) {
+    const failureStage = error && error.code === "ready_evidence_mismatch" ? "publish" : stage;
+    if (stage === "collect" && !collectResult) {
+      collectResult = recoverCollectedSnapshot(config, meetingDate, error.collectionFailure);
+    }
+    if (generationReturned && canonicalBeforeGeneration) {
+      if (canonicalBeforeGeneration.bytes !== null) {
+        writeTextAtomic(canonicalBeforeGeneration.path, canonicalBeforeGeneration.bytes);
+      } else if (fs.existsSync(canonicalBeforeGeneration.path)) {
+        // The run retains its drafts, clean report and validation. Only undo the
+        // new canonical promotion so ordinary update cannot publish this failed prepare.
+        readPrepareEvidence(config.env.outputDir, canonicalBeforeGeneration.path, "weekly failed canonical report");
+        fs.unlinkSync(canonicalBeforeGeneration.path);
+      }
+    }
+    const recorded = recordWeeklyFailure({
+      paths,
+      state,
+      stage: failureStage,
+      error,
+      validation,
+      artifacts: prepareFailureArtifacts(
+        config.env.outputDir,
+        collectResult,
+        generationResult || error.generationFailure,
+        generationState
+      ),
+      redmineWriteAttempted: false,
+      serverState: "unchanged",
+      retryCommand: formatWeeklyPrepareRetryCommand(meetingDateText),
+      now,
+    });
+    console.error(formatWeeklyFailureLog(recorded.failure, recorded.markdownPath));
+    error.weeklyFailure = recorded;
+    throw error;
+  }
 }
 
 function printPruneSummary(summary, { dryRun }) {
@@ -356,6 +709,22 @@ function writeOwnedOrThrow(statePath, attemptId, patch) {
   if (!writeGenerationStateIfOwned(statePath, attemptId, patch)) {
     throw generationSupersededError();
   }
+}
+
+function preserveRejectedReport(runPaths, revision, cleanContent) {
+  if (!Number.isInteger(revision) || revision < 1) {
+    throw new Error("rejected report requires a positive validation revision");
+  }
+  const filename = `report.rejected.${String(revision).padStart(3, "0")}.md`;
+  const rejectedReportPath = path.join(runPaths.runDir, filename);
+  writeImmutableArtifact(rejectedReportPath, cleanContent);
+  return {
+    rejectedReportPath,
+    state: {
+      latestRejectedReportPath: filename,
+      latestRejectedReportHash: sha256(cleanContent),
+    },
+  };
 }
 
 function markRecoverableRunFailure(runPaths, generationStatePath, attemptId, error) {
@@ -650,7 +1019,15 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       }
 
       if (!result.validation.publishable) {
-        updateRunState(runPaths, attemptId, { status: "validation_failed" });
+        const rejected = preserveRejectedReport(
+          runPaths,
+          revision.revision,
+          result.cleanContent
+        );
+        updateRunState(runPaths, attemptId, {
+          status: "validation_failed",
+          ...rejected.state,
+        });
         writeOwnedOrThrow(generationStatePath, attemptId, {
           status: "failed",
           failedAt: new Date().toISOString(),
@@ -658,7 +1035,9 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
           latestValidationPath,
           latestValidationHash: revision.validationHash,
           validationRevision: revision.revision,
+          ...rejected.state,
         });
+        console.error(`[validation] rejected report retained locally: ${rejected.rejectedReportPath}`);
         return {
           snapshot,
           snapshotPath,
@@ -666,6 +1045,7 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
           generationStatePath,
           runPaths,
           validation: result.validation,
+          rejectedReportPath: rejected.rejectedReportPath,
         };
       }
 
@@ -723,6 +1103,8 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       failedAt: new Date().toISOString(),
       errorCode: error && error.code ? error.code : "GENERATE_FAILED",
     });
+    error.generationFailure = { attemptId, generationStatePath,
+      runPaths: runInitialized ? runPaths : null };
     throw error;
   }
 }
@@ -867,15 +1249,30 @@ async function runRevalidate(config, meetingDate) {
     const latestValidationPath = path.basename(revision.validationPath);
 
     if (!publishable) {
-      updateRunState(run.paths, run.state.attemptId, { status: "validation_failed" });
+      const rejected = preserveRejectedReport(
+        run.paths,
+        revision.revision,
+        result.cleanContent
+      );
+      updateRunState(run.paths, run.state.attemptId, {
+        status: "validation_failed",
+        ...rejected.state,
+      });
       writeOwnedOrThrow(generationStatePath, run.state.attemptId, {
         status: "failed",
         validationStatus: result.validation.status,
         latestValidationPath,
         latestValidationHash: revision.validationHash,
         validationRevision: revision.revision,
+        ...rejected.state,
       });
-      return { ...result, runPaths: run.paths, reportPath };
+      console.error(`[validation] rejected report retained locally: ${rejected.rejectedReportPath}`);
+      return {
+        ...result,
+        runPaths: run.paths,
+        reportPath,
+        rejectedReportPath: rejected.rejectedReportPath,
+      };
     }
 
     promoteRunReport({
@@ -1251,7 +1648,7 @@ function buildIssueEnv(config) {
   };
 }
 
-async function runUpdate(config, meetingDate) {
+async function runUpdate(config, meetingDate, options = {}) {
   const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
   const reportPath = buildOutputPath(meetingDate, config);
   if (!fs.existsSync(reportPath)) {
@@ -1334,9 +1731,12 @@ async function runUpdate(config, meetingDate) {
     assertPublishable(fresh.validation, config);
     return evidence;
   };
-  const assertReady = (publishContent) => generation.state.schemaVersion === 2
-    ? validateV2Ready(publishContent).evidence
-    : validateV1Ready(publishContent);
+  const assertReady = (publishContent) => {
+    if (options.assertReady) options.assertReady();
+    return generation.state.schemaVersion === 2
+      ? validateV2Ready(publishContent).evidence
+      : validateV1Ready(publishContent);
+  };
 
   // 발표노트 자동 등록은 프로젝트 정책상 운영 프로필인 depth3 update에서만 수행한다.
   const candidates = Number(config.env.reportDepth) === 3
@@ -1352,6 +1752,7 @@ async function runUpdate(config, meetingDate) {
     );
     if (notice) console.warn(notice);
   }
+  let presentationNotesWritten = false;
   const loadNoteRefs = candidates.length
     ? async () => {
       const previewRefs = candidates.map((candidate, index) => ({
@@ -1362,7 +1763,8 @@ async function runUpdate(config, meetingDate) {
       if (!process.env.NOTION_API_KEY) {
         throw new Error("발표노트 Issue 생성에 NOTION_API_KEY가 필요합니다.");
       }
-      const refs = await publishNotes(buildIssueEnv(config), candidates, { assertReady });
+      const refs = await publishNotes(buildIssueEnv(config), candidates, { assertReady, requireAll: true });
+      presentationNotesWritten = refs.some((ref) => ref.reused === false);
       console.log(`[issue] presentation notes: ${refs.length}`);
       return refs;
     }
@@ -1374,14 +1776,22 @@ async function runUpdate(config, meetingDate) {
     draftContent: reportContent,
     loadNoteRefs,
     publishedPath,
+    onBeforeExternalWrite: options.onBeforeExternalWrite,
+    onFinalSection: options.onFinalSection,
+    verifyRemote: options.verifyRemote,
+  }).catch((error) => {
+    // A later Wiki read or READY check can fail after note creation has returned.
+    // Keep that write evidence even though no Wiki PUT has been attempted yet.
+    if (presentationNotesWritten) error.serverState = "written_unverified";
+    throw error;
   });
   // 발표완료 태그가 붙은 노트의 이슈를 종료한다. 게시가 끝난 뒤에만 수행하고,
   // 종료 실패가 주간 게시를 되돌리지 않도록 여기서 삼킨다.
   if (Number(config.env.reportDepth) === 3 && process.env.NOTION_API_KEY) {
     try {
       const issueEnv = buildIssueEnv(config);
-      const done = await queryCompletedNotes(issueEnv);
-      const closed = await closePresentedNotes(issueEnv, done);
+      const done = await (options.queryCompletedNotes || queryCompletedNotes)(issueEnv);
+      const closed = await (options.closePresentedNotes || closePresentedNotes)(issueEnv, done);
       console.log(`[issue] ${COMPLETED_TAG} 종료: ${closed.length}/${done.length}건`);
     } catch (err) {
       console.warn(`[issue] 자동 종료 건너뜀: ${err.message}`);
@@ -1394,6 +1804,7 @@ async function runUpdate(config, meetingDate) {
     validation,
     validationPath,
     publishedPath: result && result.publishedPath,
+    publication: result,
   };
 }
 
@@ -1412,6 +1823,10 @@ async function main() {
   switch (config.env.mode) {
     case "collect":
       return runCollect(config, meetingDate);
+    case "weekly-prepare":
+      return runWeeklyPrepare(config, meetingDate);
+    case "weekly-publish":
+      return runWeeklyPublish(config, meetingDate);
     case "generate": {
       const result = await runGenerate(config, meetingDate);
       // update의 게시 게이트와 같은 기준을 쓴다. 다르면 게시 가능한 WARNING이
@@ -1431,21 +1846,15 @@ async function main() {
       return result;
     }
     default:
-      throw new Error(`Unknown MODE: ${config.env.mode}. Use collect, generate, update, revalidate, or prune.`);
+      throw new Error(`Unknown MODE: ${config.env.mode}. Use collect, generate, weekly-prepare, weekly-publish, update, revalidate, or prune.`);
   }
-}
-
-if (require.main === module) {
-  main().catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  });
 }
 
 module.exports = {
   assertGenerationComplete,
   assertPublishable,
   assertV2PublishEvidence,
+  assertWeeklyProfile,
   buildPublishTimeValidation,
   hasNonOverridableV2Issue,
   isPublishable,
@@ -1458,7 +1867,19 @@ module.exports = {
   runPrune,
   runRevalidate,
   runUpdate,
+  runWeeklyPrepare,
+  runWeeklyPublish,
   validateDraft,
   writeCandidates,
   writeGenerationStateIfOwned,
 };
+
+// Weekly orchestration resolves these entry points lazily; export before CLI execution.
+if (require.main === module) {
+  main().catch((error) => {
+    if (!error.weeklyFailure) {
+      console.error(`[error] ${redactWeeklyText(error.message || "Command failed", 500).replace(/\s+/g, " ")}`);
+    }
+    process.exitCode = 1;
+  });
+}
