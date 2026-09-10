@@ -207,6 +207,9 @@ cron stdout에는 다음 한 줄을 출력한다.
 prepare가 실패했을 때는 이미 prepare 크론이 원인과 알림을 남겼으므로 06:45 publish는 정상
 skip한다. prepare 자체가 실행되지 않았거나 상태 기록 전에 강제 종료된 경우에는 publish가
 이를 새로운 `prepare_incomplete` 장애로 보고한다.
+`failed`/`published` 종료 상태도 SKIP 전에 전체 상태 스키마, 회의일·attempt·depth 3,
+필수 증거 파일의 존재·경로를 검증한다. 손상되면 `terminal_state_invalid` FAIL 로그와 오류
+종료로 래퍼 알림을 발생시키며, 신뢰할 수 없는 원본 상태와 기존 장애 증거는 변경하지 않는다.
 
 생성 완료 후 READY 증거 검증이 실패하면 canonical 보고서를 실행 전 상태로 되돌린다.
 기존 보고서가 없던 첫 실행은 새 canonical 파일만 제거하며, run 안의 clean 보고서·AI 초안·

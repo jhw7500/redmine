@@ -108,6 +108,9 @@ Markdown 장애 파일을 한 줄로 가리킨다. 안정된 분류 code와 `pri
 `[weekly][SKIP] status=failed`는 prepare가 이미 실패해 publish가 exit 0으로 끝났다는 뜻이고,
 `[weekly][SKIP] already-published`는 검증 완료한 같은 attempt를 멱등하게 건너뛴다는 뜻이다.
 두 SKIP 모두 새 장애 파일이나 알림을 만들지 않고 Redmine 요청도 보내지 않는다.
+단, 종료 상태도 회의일·attempt·depth와 필수 증거의 스키마/경로 검증을 먼저 통과해야 한다.
+손상된 종료 상태는 `terminal_state_invalid`로 오류 종료하고 래퍼가 알림을 남긴다. 소유권을
+신뢰할 수 없는 `status.json`은 덮어쓰지 않으며, FAIL 로그가 해당 원본 경로를 가리킨다.
 
 `serverState=unchanged`는 Wiki 쓰기가 확인되지 않았다는 뜻이다. `written_unverified`는 PUT 또는
 다른 Redmine 쓰기가 적용됐을 수 있으나 후속 GET의 정확한 섹션 일치를 확인하지 못했다는
