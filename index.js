@@ -1755,7 +1755,7 @@ async function runUpdate(config, meetingDate, options = {}) {
       if (!process.env.NOTION_API_KEY) {
         throw new Error("발표노트 Issue 생성에 NOTION_API_KEY가 필요합니다.");
       }
-      const refs = await publishNotes(buildIssueEnv(config), candidates, { assertReady });
+      const refs = await publishNotes(buildIssueEnv(config), candidates, { assertReady, requireAll: true });
       console.log(`[issue] presentation notes: ${refs.length}`);
       return refs;
     }

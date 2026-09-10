@@ -217,8 +217,11 @@ PUT 뒤에는 같은 wiki JSON을 다시 GET하고 `extractSection()`으로 조�
 적용됐을 수 있으므로 `serverState=written_unverified`를 명시하고 자동 rollback은 하지 않는다.
 
 발표노트 Issue 생성 및 종료는 기존 depth 3 `suggest` 계약을 유지한다. 게시 전 issue 생성도
-기존 `assertReady`를 통과해야 한다. Wiki 게시 뒤 발표완료 종료의 best-effort 정책은 본 설계의
-성공 판정에 포함하지 않는다.
+기존 `assertReady`를 통과해야 한다. 선택된 노트는 모두 유효한 Issue ID로 생성 또는 재사용되어야
+한다. 개별 노트 조회·본문 로딩·생성 실패를 건너뛰지 않고 Wiki 게시 전에 전파한다. Issue POST가
+이미 시도된 뒤 실패하면 `serverState=written_unverified`를 남기고, 실패한 publish 재호출은
+외부 작업을 반복하지 않는다. 독립 발표노트 CLI의 기존 best-effort 모드는 유지한다.
+Wiki 게시 뒤 발표완료 종료의 best-effort 정책은 본 설계의 성공 판정에 포함하지 않는다.
 
 ## 크론 전환
 
