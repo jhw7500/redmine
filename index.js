@@ -159,6 +159,7 @@ function validateDraft(snapshot, snapshotPath, reportPath, meetingDate, config, 
 const NON_OVERRIDABLE_V2_CODES = new Set([
   "source_selection_evidence_mismatch",
   "source_selection_status_unverified",
+  "source_selection_detail_missing",
   "malformed_fact_marker",
   "unknown_fact_id",
   "fact_value_mismatch",
@@ -996,7 +997,9 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
         sourceCoverageMode,
       }
     );
-    result.validation = enforceSourceSelectionStatus(result.validation, generationStateBase.generationMethod);
+    result.validation = enforceSourceSelectionStatus(result.validation, generationStateBase.generationMethod, {
+      records, evidence:generated.evidence, reportDepth:config.env.reportDepth,
+    });
     if (records) Object.assign(result.validation, {
       generationMethod:"source_selection", sourceRecordsHash:records.recordsHash,
       sourceSelectionHash:generationStateBase.sourceSelectionHash,
@@ -1200,7 +1203,7 @@ async function runRevalidate(config, meetingDate) {
     }
 
     const annotated = fs.readFileSync(run.paths.workingDraftPath, "utf8");
-    assertSourceSelectionEvidence({run, snapshot, generationState, annotatedContent:annotated, config,
+    const selectionContext = assertSourceSelectionEvidence({run, snapshot, generationState, annotatedContent:annotated, config,
       promptInput:readRevalidationPromptInput(run.paths.promptInputPath)});
     const validationOptions = {
       attemptId: run.state.attemptId,
@@ -1230,7 +1233,9 @@ async function runRevalidate(config, meetingDate) {
         run.catalog,
         validationOptions
       );
-    result.validation = enforceSourceSelectionStatus(result.validation, run.state.generationMethod);
+    result.validation = enforceSourceSelectionStatus(result.validation, run.state.generationMethod, {
+      ...selectionContext, reportDepth:run.state.reportDepth,
+    });
     if (run.state.generationMethod === "source_selection") Object.assign(result.validation, {
       generationMethod:run.state.generationMethod, sourceRecordsHash:run.state.sourceRecordsHash,
       sourceSelectionHash:run.state.sourceSelectionHash,
@@ -1598,7 +1603,12 @@ function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, 
   if (sha256(annotatedContent) !== validation.annotatedDraftHash) {
     throw evidenceError("annotated_draft_hash_mismatch", "annotated draft hash mismatch");
   }
-  assertSourceSelectionEvidence({run, snapshot, generationState:current, annotatedContent, promptInput, validation, config});
+  const selectionContext = assertSourceSelectionEvidence({run, snapshot, generationState:current, annotatedContent, promptInput, validation, config});
+  // Recompute quality from sealed inputs, including historically accepted fallbacks.
+  const effectiveValidation = enforceSourceSelectionStatus(validation, run.state.generationMethod, {
+    ...selectionContext, reportDepth:run.state.reportDepth,
+  });
+  if (hasNonOverridableV2Issue(effectiveValidation)) assertPublishable(effectiveValidation, config);
   const expectedCleanHash = validation.cleanReportHash;
   if (
     !expectedCleanHash
@@ -1617,7 +1627,7 @@ function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, 
     );
   }
 
-  return { validation, run };
+  return { validation:effectiveValidation, run };
 }
 
 function buildPublishTimeValidation(evidenceValidation, publishTime) {
