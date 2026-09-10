@@ -208,7 +208,10 @@ prepare가 실패했을 때는 이미 prepare 크론이 원인과 알림을 남�
 skip한다. prepare 자체가 실행되지 않았거나 상태 기록 전에 강제 종료된 경우에는 publish가
 이를 새로운 `prepare_incomplete` 장애로 보고한다.
 `failed`/`published` 종료 상태도 SKIP 전에 전체 상태 스키마, 회의일·attempt·depth 3,
-필수 증거 파일의 존재·경로를 검증한다. 손상되면 `terminal_state_invalid` FAIL 로그와 오류
+필수 증거 파일의 존재·경로와 내용을 검증한다. `published`는 기존 READY 증거 검증을 재사용해
+보고서·스냅샷·생성 run의 해시/소유권을 대조한다. `failed`는 해당 회의 failures 디렉터리의
+JSON/Markdown 쌍이 같은 회의일·attempt·stage·시각을 소유하고 내용도 일치해야 한다.
+검증 중 상태 변경도 허용하지 않는다. 손상되면 `terminal_state_invalid` FAIL 로그와 오류
 종료로 래퍼 알림을 발생시키며, 신뢰할 수 없는 원본 상태와 기존 장애 증거는 변경하지 않는다.
 
 생성 완료 후 READY 증거 검증이 실패하면 canonical 보고서를 실행 전 상태로 되돌린다.
