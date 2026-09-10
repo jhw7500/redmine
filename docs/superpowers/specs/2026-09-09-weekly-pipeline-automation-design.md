@@ -178,6 +178,10 @@ Markdown은 회의 직전에도 읽을 수 있도록 같은 사실을 다음 순
 token 패턴을 마스킹한다. HTTP 응답 header 전체나 인증정보가 들어갈 수 있는 원문 body는 실패
 요약에 복사하지 않는다.
 
+Notion 수집기의 HTTP 실패와 JSON 파싱 실패도 응답 본문 없이 `NOTION_HTTP_FAILED` 또는
+`NOTION_JSON_INVALID`로 전달한다. 부분 snapshot 저장 후 collect가 예외를 던져도 회의일·경로·
+content hash를 검증해 해당 파일과 파일 전체 SHA-256을 실패 산출물 목록에 남긴다.
+
 cron stdout에는 다음 한 줄을 출력한다.
 
 ```text
@@ -205,6 +209,9 @@ skip한다. prepare 자체가 실행되지 않았거나 상태 기록 전에 강
 이를 새로운 `prepare_incomplete` 장애로 보고한다.
 
 PUT 뒤에는 같은 wiki JSON을 다시 GET하고 `extractSection()`으로 조현우 섹션을 추출한다.
+게시 직전 조회와 게시 후 재조회 모두 양의 정수 Wiki version 및 유효한 `updated_on` 시각을
+요구한다. 값이 없거나 잘못되면 PUT 또는 게시 성공 처리를 차단하며, 본문 변경이 없는 경우도
+동일하게 검사한다. 게시 후 누락을 발견하면 `written_unverified` 실패 증거를 남긴다.
 서버 섹션과 PUT에 사용한 `finalSection`의 정규화 문자열 및 hash가 모두 일치할 때만
 `published`로 전이한다. 불일치는 `publish_verify_mismatch`로 기록한다. 이 경우 쓰기가 이미
 적용됐을 수 있으므로 `serverState=written_unverified`를 명시하고 자동 rollback은 하지 않는다.

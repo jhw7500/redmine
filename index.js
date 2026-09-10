@@ -26,9 +26,11 @@ const {
   buildCandidatesPath,
   buildGenerationStatePath,
   buildPublishedPath,
+  buildSnapshotPath,
   buildValidationPath,
   sha256,
   hashObject,
+  verifySnapshot,
   writeJsonAtomic,
   writeTextAtomic,
 } = require("./lib/report-artifact");
@@ -224,11 +226,20 @@ function assertPublishable(validation, config) {
 
 async function runCollect(config, meetingDate) {
   const result = await collectSnapshot(config, meetingDate);
-  writeCandidates(result.snapshot, result.snapshotPath, meetingDate, config);
-  if (result.snapshot.status !== "sealed" && !config.env.allowPartialSnapshot) {
-    throw new Error(
-      `수집 snapshot이 ${result.snapshot.status} 상태입니다: ${result.snapshot.failures.join("; ")}`
-    );
+  try {
+    writeCandidates(result.snapshot, result.snapshotPath, meetingDate, config);
+    if (result.snapshot.status !== "sealed" && !config.env.allowPartialSnapshot) {
+      throw Object.assign(new Error(
+        `수집 snapshot이 ${result.snapshot.status} 상태입니다: ${result.snapshot.failures.join("; ")}`
+      ), { code: "COLLECT_PARTIAL" });
+    }
+  } catch (error) {
+    error.collectionFailure = {
+      snapshotPath: result.snapshotPath,
+      snapshotHash: result.snapshot.contentHash,
+      meetingDate: result.snapshot.meetingDate,
+    };
+    throw error;
   }
   return result;
 }
@@ -287,6 +298,21 @@ function readyEvidenceError(message, cause) {
   const error = new Error(message, cause ? { cause } : undefined);
   error.code = "ready_evidence_mismatch";
   return error;
+}
+
+function recoverCollectedSnapshot(config, meetingDate, failure) {
+  if (!failure || failure.meetingDate !== formatDate(meetingDate)) return null;
+  try {
+    const snapshotPath = path.resolve(buildSnapshotPath(meetingDate, config));
+    if (failure.snapshotPath !== snapshotPath) return null;
+    const snapshot = verifySnapshot(JSON.parse(readPrepareEvidence(
+      config.env.outputDir, snapshotPath, "weekly failed collection snapshot"
+    )));
+    if (snapshot.meetingDate !== failure.meetingDate || snapshot.contentHash !== failure.snapshotHash) return null;
+    return { snapshotPath, snapshot };
+  } catch {
+    return null;
+  }
 }
 
 function prepareFailureArtifacts(outputDir, collectResult, generationResult, generationState) {
@@ -512,6 +538,9 @@ async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
     return { state, collectResult, generationResult };
   } catch (error) {
     const failureStage = error && error.code === "ready_evidence_mismatch" ? "publish" : stage;
+    if (stage === "collect" && !collectResult) {
+      collectResult = recoverCollectedSnapshot(config, meetingDate, error.collectionFailure);
+    }
     if (generationReturned && canonicalBeforeGeneration) {
       writeTextAtomic(canonicalBeforeGeneration.path, canonicalBeforeGeneration.bytes);
     }
