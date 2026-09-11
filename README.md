@@ -86,6 +86,16 @@ Weekly unattended operation
 일반 `collect`, `generate`, `revalidate`, `update`, `prune` 명령과 일반 generate의 `freeform`
 기본값은 그대로 유지된다.
 
+depth3의 원문 기반 대체보고서는 본문 또는 부모 문맥에 상세 설명이 붙은 원문 항목을 먼저
+선택하고, 설명을 재작성하지 않고 보존한다. 상세 항목이 많으면 최소 분량에서 멈추지 않고
+기존 선택 상한까지 담는다. 섹션 공통 설명은 선택된 자식에 함께 남기며, 공통 설명만으로
+모든 자식을 필수 선택하지는 않는다. 상세 항목이 누락되면 `source_selection_detail_missing`으로
+게시를 차단하며, 검증 JSON에 원문 ID·섹션·항목명과 복구 안내를 남긴다. 경고 허용이나
+수동 override로 우회할 수 없고, 과거 WARNING 대체본도 게시 직전에 재검사한다.
+실패한 생성물은 아래의 rejected 경로에 보존한다. 원문·선택 분량을 확인한 뒤 새
+`generate`/`weekly-prepare`가 필요하며, 단순 `revalidate`는 고정된 선택을 바꾸지 않는다.
+정상 AI 선택 및 다른 depth의 선택 규칙은 변경하지 않는다.
+
 전환할 cron 항목은 정확히 다음 두 줄이다. 실제 crontab 교체 전에는 기존 내용을 별도 파일로
 백업하고, 다른 항목이 byte 단위로 유지되는지 확인한다.
 

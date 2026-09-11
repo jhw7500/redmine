@@ -36,7 +36,9 @@ function replaySnapshot({snapshotPath, draftPath, categories, outputDir}) {
     sectionHeader:records.heading,repos:{},knownPaths:coverage.knownPaths,
     sourceCoverageMode:'required_sections_notion_advisory_v2'};
   const result = validateV2ReportContract(snapshot.rawContent,annotatedContent,catalog,coverage,options);
-  const validation = enforceSourceSelectionStatus(result.validation,'source_selection');
+  const validation = enforceSourceSelectionStatus(result.validation,'source_selection',{
+    records, evidence:{origin:'deterministic_fallback',selection}, reportDepth:3,
+  });
   let previous = null;
   if (draftPath) {
     const read = name => JSON.parse(fs.readFileSync(path.join(path.dirname(draftPath),name),'utf8'));
