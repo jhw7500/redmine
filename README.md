@@ -80,11 +80,27 @@ Run
 
 Weekly unattended operation
 
-주간 자동화는 저장소의 두 래퍼만 호출한다. prepare 래퍼는 수집부터 depth 3
+주간 자동화는 저장소의 두 래퍼만 호출한다. prepare 래퍼는 수집부터 depth 2
 `source_selection` 생성·검증과 READY 증거 결속까지 한 번에 수행하고, publish 래퍼는 같은
 회의일의 READY snapshot/generation/report hash를 다시 검증한 뒤에만 Redmine 쓰기를 시작한다.
 일반 `collect`, `generate`, `revalidate`, `update`, `prune` 명령과 일반 generate의 `freeform`
 기본값은 그대로 유지된다.
+
+새 depth2 `source_selection` 출력은 중간 테마 제목 없이 항목을 바로 배치하고,
+대체보고서 여부는 상단에 한 번만 표시한다(`원문 발췌` 반복 없음). 정상 AI 선택은
+16~24개 범위, 결정적 fallback은 16개(원본이 적으면 가용량)·섹션별 최대 9개를 선택한다.
+fallback은 섹션별로 실측·달성 제목, 원인 규명·수정·실패 분석, 수치 검증 및
+수정·복구 단서, Notion 요약 유무 순의 점수를 사용한다. 이는 중요도 보장이 아닌
+휴리스틱이며, 동점은 원본 순서다. 선택된 원문·요약·조건은 자르거나 재작성하지 않는다.
+depth2로 새로 수집하면 Notion 본문 상세 hydration은 하지 않고 저장된 출처 요약을
+유지한다. 이미 상세가 있는 snapshot을 depth2로 렌더링하면 선택 항목의 상세도 보존하므로
+새 depth2 수집본보다 길 수 있다.
+
+새 출력 형식은 선택 증거의 `renderVersion:2`로 결속한다. 버전 필드가 없는 기존 산출물은
+기존 렌더러로 재검증하며, 알 수 없는 버전은 차단한다. 주간 READY의 depth는 현재 설정과
+일치해야 하지만, 이미 종료된 depth3 기록은 depth2 설정에서도 증거 확인 후 중복 게시 없이
+건너뛴다. 발표노트 Issue 생성·재사용·완료 종료는 depth가 아니라 `PRESENTATION_NOTE_MODE`로
+제어하며, `off`에서는 모두 수행하지 않는다.
 
 depth3의 원문 기반 대체보고서는 본문 또는 부모 문맥에 상세 설명이 붙은 원문 항목을 먼저
 선택하고, 설명을 재작성하지 않고 보존한다. 상세 항목이 많으면 최소 분량에서 멈추지 않고
@@ -94,7 +110,7 @@ depth3의 원문 기반 대체보고서는 본문 또는 부모 문맥에 상세
 수동 override로 우회할 수 없고, 과거 WARNING 대체본도 게시 직전에 재검사한다.
 실패한 생성물은 아래의 rejected 경로에 보존한다. 원문·선택 분량을 확인한 뒤 새
 `generate`/`weekly-prepare`가 필요하며, 단순 `revalidate`는 고정된 선택을 바꾸지 않는다.
-정상 AI 선택 및 다른 depth의 선택 규칙은 변경하지 않는다.
+depth3의 정상 AI 선택 규칙은 변경하지 않는다.
 
 새 수집본은 보고 대상 Notion 항목의 요약을 `출처 요약`으로 원문에 함께 보존한다.
 선택된 항목의 요약은 결과·조건·검증 한계를 분리하지 않고 전부 렌더링하지만, 요약만
@@ -104,8 +120,70 @@ depth3의 원문 기반 대체보고서는 본문 또는 부모 문맥에 상세
 문구만으로 예외 처리하지 않으며, 출처 정보가 없는 과거 snapshot은 기존 규칙을 유지한다.
 기존 sealed snapshot에는 요약이나 출처 정보를 소급 추가하지 않는다.
 
-전환할 cron 항목은 정확히 다음 두 줄이다. 실제 crontab 교체 전에는 기존 내용을 별도 파일로
-백업하고, 다른 항목이 byte 단위로 유지되는지 확인한다.
+저장 원본만으로 비교할 때는 `node scripts/replay-source-selection.js --snapshot FILE
+--depth 2 --output-dir NEW_DIR`를 사용한다(기본 depth3). AI·실시간 수집·게시 없이
+보고서와 검증 JSON을 저장한다. 이 비교본은 실제 게시 증거가 아니며,
+`liveStatusVerified:false`와 검증 오류·경고를 반드시 함께 확인한다.
+
+### depth2 + depth3 보관 / Slack 모바일 보기 (선택 실행)
+
+`run-weekly-pair-env.sh`는 기존 단일-depth cron과 별도 진입점이다. 운영 전환·실제 게시·발송은
+별도 승인 후 수행한다. `prepare`는 depth3로 한 번 수집하고, 같은 sealed snapshot에서
+depth3·depth2를 각각 생성·검증한다(AI 선택 호출은 최대 1회씩, 합계 2회).
+기존 depth3 선택·본문을 모바일용으로 덮어쓰지 않는다. 깊은 원본을 공유하므로 이 depth2는
+별도 depth2 수집본보다 길 수 있고, 두 버전의 선택 항목도 다르다. **depth3가 depth2의 모든
+항목을 포함하는 상위집합은 아니다.** Slack에는 depth3에서 선택한 항목만 같은 순서로 보낸다.
+
+```text
+OUTPUT_DIR/pairs/YYYY-MM-DD/
+  manifest.json
+  source/
+  depth2/                 # report + snapshot + generation/run + pipeline evidence
+  depth3/                 # complete original, independently publishable
+  slack.depth3.json       # separate mobile presentation
+  publication.*.json      # selected depth and publication receipt
+  slack-delivery/         # per-message intent/receipt; no bot credentials
+```
+
+두 원본과 검증 자료는 함께 보관하며, OUTPUT_DIR 루트의 자동 run 정리 대상에 포함하지 않는다.
+같은 회의일 재생성은 기존 pair를 덮어쓰지 않고 중단한다. 새 시도는 별도 OUTPUT_DIR을 쓰되,
+게시 실패·이미 게시된 보고서의 교체는 먼저 서버 상태와 이전 증거를 확인하고 별도 승인받는다.
+
+```bash
+rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh prepare
+rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh preview
+# 아래 둘 중 하나만 선택한다. 인자 생략 시 depth2.
+rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh publish 2
+rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh publish 3
+# 수신처 확정·발송 승인 후: notify 앱과 본인의 1:1 대화 ID(D로 시작)
+rtk env MEETING_DATE=2026-09-16 SLACK_BRIEFING_CHANNEL_ID=D0123456789 ./run-weekly-pair-env.sh send
+```
+
+Slack은 짧은 부모 메시지 + 항목별 세로 스레드이며, 긴 원문은 생략하지 않고 여러 메시지로
+나눈다. 수치·조건·검증 한계를 보존하고 표·다단 컬럼·멘션·링크 미리보기를 사용하지 않는다.
+본문과 접근성용 text를 함께 제공하는 방식은 [Slack 공식 안내](https://docs.slack.dev/reference/methods/chat.postMessage/)를 따른다.
+기존 Repowire bot_token(또는 SLACK_BOT_TOKEN)을 재사용하지만, 개인 상세본의 수신처를 기존
+실패 알림 채널에서 자동 선택하지 않는다. `SLACK_BRIEFING_CHANNEL_ID`는 `D`로 시작하는
+본인과 `notify` 앱의 1:1 대화 ID를 별도로 지정해야 하며 공개·비공개 채널 ID는 거부한다.
+Slack 전송 실패는 Redmine 재게시를 유발하지 않는다. 확인된 메시지는 재전송하지 않고,
+응답이 불확실하거나 기록이 손상되면 자동 재시도를 막아 중복 전송을 피한다.
+준비 때 저장한 `slack.depth3.json`과 발송 직전 재생성한 본문이 byte 단위로 다르면 네트워크
+요청 전에 중단한다. 2026-09-12에는 저장된 09-09 실제 Codex depth3로 `notify` 1:1 대화에
+부모 1개와 상세 답글 27개를 보내 Slack 응답 28건과 모바일 표시를 확인했다. 이는 일회성
+파일럿이며 정기 수신처 설정과 cron 전환을 뜻하지 않는다.
+
+정기 pair 운영으로 전환할 때는 `.env`에 확인된 `SLACK_BRIEFING_CHANNEL_ID=D...`를 두고,
+기존 단일-depth 두 작업을 아래 세 작업으로 교체한다. publish와 send는 별도 실행이므로
+Redmine 게시가 실패해도 보존된 depth3 상세본은 독립적으로 발송할 수 있다.
+
+```cron
+5 6 * * 3 /home/jhw/ai/opencode/projects/redmine/run-weekly-pair-env.sh prepare >> /home/jhw/ai/opencode/projects/redmine/out/cron.log 2>&1
+45 6 * * 3 /home/jhw/ai/opencode/projects/redmine/run-weekly-pair-env.sh publish 2 >> /home/jhw/ai/opencode/projects/redmine/out/cron.log 2>&1
+5 7 * * 3 /home/jhw/ai/opencode/projects/redmine/run-weekly-pair-env.sh send >> /home/jhw/ai/opencode/projects/redmine/out/cron.log 2>&1
+```
+
+아래 두 줄은 Slack pair 기능을 사용하지 않는 기존 단일-depth 운영안이다. 실제 crontab 교체
+전에는 현재 내용을 별도 파일로 백업하고, 다른 항목이 byte 단위로 유지되는지 확인한다.
 
 ```cron
 5 6 * * 3 /home/jhw/ai/opencode/projects/redmine/run-weekly-prepare-env.sh >> /home/jhw/ai/opencode/projects/redmine/out/cron.log 2>&1

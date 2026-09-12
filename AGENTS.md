@@ -25,11 +25,12 @@
 
 ## 발표노트 → Redmine 작업(Issue) 자동 등록
 
-Notion KB 항목의 `tags`에 **`발표노트`** 를 붙이면, 주간 보고(depth3 generate)에서 해당 노트가
+Notion KB 항목의 `tags`에 **`발표노트`** 를 붙이면, 주간 보고 게시(update)에서 해당 노트가
 Redmine `advance-development-team` 프로젝트의 **작업(Issue)**으로 자동 등록되고, 조현우 섹션 말미
 `**발표노트(상세)**` 블록에 `#이슈번호`로 링크된다.
 
 - 대상: KB 항목 중 `발표노트` 태그 + 보고 기간(created_time) 내.
+- 보고 depth와 무관하게 `PRESENTATION_NOTE_MODE`로 제어한다. `off`이면 생성·완료 종료를 하지 않는다.
 - 본문: Notion 페이지 전체를 Markdown으로 변환해 이슈 설명에 수록.
 - 중복방지: 이슈 설명의 `Notion-Page-Id: <id>` 마커로 조회 → 있으면 재사용(재생성 안 함).
 - 트래커: 프로젝트 활성 트래커 중 선호순(`새기능`→`검토`), 상태 `검토`, 담당 본인.

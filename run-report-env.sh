@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 _requested_mode="${MODE:-}"
 _requested_weekly_profile="${REDMINE_WEEKLY_PROFILE:-}"
+_requested_pair_depth="${WEEKLY_PUBLISH_DEPTH:-2}"
+_requested_briefing_channel_set=${SLACK_BRIEFING_CHANNEL_ID+x}
+_requested_briefing_channel=${SLACK_BRIEFING_CHANNEL_ID:-}
 _requested_meeting_date_set=0
 _requested_output_dir_set=0
 _requested_snapshot_path_set=0
@@ -34,6 +37,15 @@ else
 fi
 unset _requested_mode
 
+# Pair publication is an explicit per-invocation choice; .env must not select depth3 silently.
+if [[ "$MODE" == weekly-pair-* ]]; then
+  export WEEKLY_PUBLISH_DEPTH="$_requested_pair_depth"
+  if [[ $_requested_briefing_channel_set == x ]]; then
+    export SLACK_BRIEFING_CHANNEL_ID="$_requested_briefing_channel"
+  fi
+fi
+unset _requested_pair_depth _requested_briefing_channel_set _requested_briefing_channel
+
 if [[ -n "$_requested_weekly_profile" ]]; then
   _weekly_profile=$_requested_weekly_profile
 else
@@ -52,14 +64,14 @@ case $_weekly_profile in
     export AI_GENERATION_METHOD=source_selection
     export AI_GENERATION_SCOPE=whole
     export SOURCE_SELECTION_FALLBACK=1
-    export REPORT_DEPTH=3
+    export REPORT_DEPTH=2
     export VALIDATION_MODE=block
     export VALIDATION_OVERRIDE=0
     export PRESENTATION_NOTE_MODE=suggest
     ;;
   publish)
     export AUTO_APPROVE=1
-    export REPORT_DEPTH=3
+    export REPORT_DEPTH=2
     export VALIDATION_MODE=block
     export VALIDATION_OVERRIDE=0
     export PRESENTATION_NOTE_MODE=suggest
@@ -123,6 +135,12 @@ repowire_conf_value() {
   [[ "$value" == "null" ]] && value=""
   printf '%s' "$value"
 }
+
+if [[ "$MODE" == weekly-pair-send ]]; then
+  export SLACK_BOT_TOKEN="${SLACK_BOT_TOKEN:-$(repowire_conf_value slack bot_token)}"
+  # The existing failure-alert channel may be shared. Private reports require an explicit destination.
+  # Never fall back to SLACK_CHANNEL_ID or Repowire's channel_id here.
+fi
 
 # cron 실행은 실패해도 아무도 모른 채 지나간다 (2026-07-22·07-29 게시가 2주 연속
 # 조용히 누락된 원인). 실패를 반드시 눈에 띄게 남긴다.

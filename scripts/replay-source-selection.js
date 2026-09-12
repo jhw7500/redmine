@@ -19,7 +19,9 @@ function summarize(validation) {
   return {status:validation.status,errors,warnings};
 }
 
-function replaySnapshot({snapshotPath, draftPath, categories, outputDir}) {
+function replaySnapshot({snapshotPath, draftPath, categories, outputDir, reportDepth = 3}) {
+  if (![2,3].includes(reportDepth)) throw new Error('Offline replay supports depth 2 or 3');
+  const renderVersion = reportDepth === 2 ? 2 : 1;
   const snapshot = readSnapshot(snapshotPath);
   categories ||= require('../repo-config.json').categories;
   const coverage = buildSourceCoverageCatalog(snapshot,categories);
@@ -28,16 +30,16 @@ function replaySnapshot({snapshotPath, draftPath, categories, outputDir}) {
   }],{knownPaths:coverage.knownPaths});
   const source = annotateSourceCoverageReferences(annotateFactReferences(snapshot.rawContent,catalog),coverage);
   const records = buildSourceRecords(snapshot,source,coverage);
-  const selection = buildFallbackSelection(records,3);
+  const selection = buildFallbackSelection(records,reportDepth,{renderVersion});
   const annotatedContent = expandFactReferences(renderSourceSelection(records,selection,{
-    fallback:true,reportDepth:3,
+    fallback:true,reportDepth,renderVersion,
   }),catalog);
-  const options = {meetingDate:snapshot.meetingDate,reportDepth:3,snapshotHash:snapshot.contentHash,
+  const options = {meetingDate:snapshot.meetingDate,reportDepth,snapshotHash:snapshot.contentHash,
     sectionHeader:records.heading,repos:{},knownPaths:coverage.knownPaths,
     sourceCoverageMode:'required_sections_notion_advisory_v2'};
   const result = validateV2ReportContract(snapshot.rawContent,annotatedContent,catalog,coverage,options);
   const validation = enforceSourceSelectionStatus(result.validation,'source_selection',{
-    records, evidence:{origin:'deterministic_fallback',selection}, reportDepth:3,
+    records, evidence:{origin:'deterministic_fallback',selection}, reportDepth,
   });
   let previous = null;
   if (draftPath) {
@@ -50,11 +52,11 @@ function replaySnapshot({snapshotPath, draftPath, categories, outputDir}) {
       attemptId:state.attemptId,meetingDate:snapshot.meetingDate,reportDepth:state.reportDepth,
     },oldCoverage);
     previous = validateV2ReportContract(snapshot.rawContent,fs.readFileSync(draftPath,'utf8'),oldCatalog,oldCoverage,{
-      ...options,knownPaths:oldCoverage?.knownPaths,sourceCoverageMode:state.sourceCoverageMode,
+      ...options,reportDepth:state.reportDepth,knownPaths:oldCoverage?.knownPaths,sourceCoverageMode:state.sourceCoverageMode,
     }).validation;
   }
   const summary = {schemaVersion:1,offlineOnly:true,aiCalls:0,liveStatusVerified:false,
-    meetingDate:snapshot.meetingDate,snapshotHash:snapshot.contentHash,
+    meetingDate:snapshot.meetingDate,snapshotHash:snapshot.contentHash,reportDepth,renderVersion,
     sourceRecords:records.records.length,selectedRecords:selection.sections.reduce((total,section)=>
       total+section.groups.reduce((count,group)=>count+group.items.length,0),0),
     cleanReportHash:sha256(result.cleanContent),selection:summarize(validation),
@@ -73,11 +75,11 @@ function replaySnapshot({snapshotPath, draftPath, categories, outputDir}) {
 
 function main(args) {
   const options = {};
-  const flags = {'--snapshot':'snapshotPath','--draft':'draftPath','--output-dir':'outputDir'};
+  const flags = {'--snapshot':'snapshotPath','--draft':'draftPath','--output-dir':'outputDir','--depth':'reportDepth'};
   for (let i=0;i<args.length;i+=2) {
     const key = flags[args[i]];
-    if (!key || !args[i+1] || args[i+1].startsWith('--') || options[key]) throw new Error('Usage: node scripts/replay-source-selection.js --snapshot FILE [--draft ANNOTATED_DRAFT] [--output-dir NEW_DIR]');
-    options[key] = path.resolve(args[i+1]);
+    if (!key || !args[i+1] || args[i+1].startsWith('--') || options[key] !== undefined) throw new Error('Usage: node scripts/replay-source-selection.js --snapshot FILE [--depth 2|3] [--draft ANNOTATED_DRAFT] [--output-dir NEW_DIR]');
+    options[key] = key === 'reportDepth' ? Number(args[i+1]) : path.resolve(args[i+1]);
   }
   if (!options.snapshotPath) throw new Error('--snapshot is required');
   const {summary} = replaySnapshot(options);
