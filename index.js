@@ -1644,7 +1644,11 @@ function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, 
     );
   }
 
-  return { validation:effectiveValidation, run };
+  return {
+    validation: effectiveValidation,
+    run,
+    generationProvider: promptInput.provider,
+  };
 }
 
 function buildPublishTimeValidation(evidenceValidation, publishTime) {
@@ -1716,9 +1720,11 @@ async function runUpdate(config, meetingDate, options = {}) {
 
   let validation;
   let validationPath;
+  let generationProvider;
   if (generation.state.schemaVersion === 2) {
     const ready = validateV2Ready();
     const { evidence } = ready;
+    generationProvider = evidence.generationProvider;
     validation = ready.validation;
     validationPath = path.join(
       evidence.run.paths.runDir,
@@ -1800,6 +1806,7 @@ async function runUpdate(config, meetingDate, options = {}) {
     assertReady,
     draftContent: reportContent,
     loadNoteRefs,
+    generationProvider,
     publishedPath,
     onBeforeExternalWrite: options.onBeforeExternalWrite,
     onFinalSection: options.onFinalSection,
