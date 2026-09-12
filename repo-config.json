@@ -26,6 +26,31 @@
       },
       "_reportSkipValuesNote": "이 select 옵션이 들어오면 보고서에서 제외 (개인 메모, 미정 결정 등). jhw-notion REPORT_VALUES는 'none'만 정의하지만 redmine은 다양한 skip 값 인식.",
       "reportSkipValues": ["none", "private", "note", "no-report", "skip"],
+      "reportReferences": [
+        {
+          "sourceId": "notion:3d48a230-a04e-8146-94b9-ece48a25c5f6",
+          "referencePageId": "3c68a230-a04e-816f-ac54-e3686c23fd6f",
+          "label": "이전 싱크 분석",
+          "audience": "on_request",
+          "version": "2026-08-31",
+          "url": "https://claude.ai/code/artifact/70e855a2-ccf2-43f9-8ef7-cf4b4bf7b25e"
+        },
+        {
+          "sourceId": "notion:3d48a230-a04e-8146-94b9-ece48a25c5f6",
+          "referencePageId": "3c68a230-a04e-816f-ac54-e3686c23fd6f",
+          "label": "파이프라인 변경 내역",
+          "audience": "on_request",
+          "url": "https://claude.ai/code/artifact/d770fafb-d89d-451e-a58e-4147b152b591"
+        },
+        {
+          "sourceId": "notion:3d48a230-a04e-81e4-a24a-e71c23a82364",
+          "referencePageId": "3ce8a230-a04e-81d5-a6fd-ee417578d946",
+          "label": "120fps 검토 이력",
+          "audience": "on_request",
+          "version": "2026-09-09",
+          "url": "https://app.notion.com/p/MAX9296-camera4-360p-120-FPS-VPU-ISP-3ce8a230a04e81d5a6fdee417578d946"
+        }
+      ],
       "projectMapping": {
         "pim-check": "pimTest",
         "max9296": "pimDriverCam",
