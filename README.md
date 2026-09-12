@@ -182,6 +182,57 @@ Slack 전송 실패는 Redmine 재게시를 유발하지 않는다. 확인된 �
 부모 1개와 상세 답글 27개를 보내 Slack 응답 28건과 모바일 표시를 확인했다. 이는 일회성
 파일럿이며 정기 수신처 설정과 cron 전환을 뜻하지 않는다.
 
+### 관련 상세자료 URL (명시적 연결, opt-in)
+
+`repo-config.json`의 `sources.notion.reportReferences`에 이번 주 Notion 업무 항목과
+기존 자료 페이지를 **정확한 ID로** 연결한다. 분류·프로젝트명·제목 유사도로 자동 연결하지 않는다.
+각 항목의 자료는 다음과 같이 표시된다. 두 링크를 넘으면 다음 줄로 나누며 생략하지 않는다.
+
+```text
+- [Notion] 해당 주의 분석 결과
+  ↳ 출처 요약: 결과와 적용 조건을 유지한다.
+  ↳ 자료: [상세분석](https://example.com/analysis) · [운영안](https://example.com/operations)
+```
+
+```json
+{
+  "sourceId": "notion:11111111-1111-4111-8111-111111111111",
+  "referencePageId": "22222222-2222-4222-8222-222222222222",
+  "label": "상세분석",
+  "audience": "team",
+  "version": "2026-09-11"
+}
+```
+
+위 객체들을 `sources.notion.reportReferences` 배열에 넣는다(예시 UUID는 실제 ID로 교체).
+`referencePageId`는 기존 References/KB/프로젝트 자료 페이지이며 기본 주소는 그 페이지의
+`url` 속성이다. 아티팩트가 본문에만 있는 과거 자료나 commit 고정 저장소 문서는 검토한
+`"url": "https://..."`을 명시한다. Notion 페이지 자체를 열려면 해당 페이지의 URL을 명시한다.
+원문을 긁어 임의의 첫 링크를 고르지 않고, 자료 등록·업로드·공유 설정도 변경하지 않는다.
+
+- `label`은 짧은 자료명(최대 32자), `version`은 선택적인 판/기준일(최대 48자)이다.
+- `audience: "team"`은 **담당자가 팀 열람을 확인했다는 선언**이다. Notion API 접근 성공은
+  Redmine 독자의 열람 가능성을 보장하지 않는다. 기본 비공개인 아티팩트는 공유 권한을 먼저 확인한다.
+- HTTPS 고정 주소만 허용한다. 자격증명·query parameter·위험한 Markdown 문자·잘못된 ID·중복 연결·
+  `report=private/none` 등 제외 자료·삭제 자료·조회 실패·주소 누락은 수집을 중단한다.
+- 보고 기간 밖 자료는 연결된 현 주차 항목의 참고자료로만 읽는다. 성과 항목이나 수집 건수에
+  다시 추가하지 않는다. 해당 주에 원본 업무 항목이 없으면 그 연결은 조회하지 않는다.
+- URL·자료명·판·자료 페이지 ID·마지막 편집시각·부모 항목을 snapshot과 source-records에 묶는다.
+  주소를 생성 뒤 붙이거나 다른 항목으로 옮기면 게시 전 증거 검증에서 거부한다.
+- 이 기능은 `AI_GENERATION_METHOD=source_selection` 전용이다. URL은 AI 선택 프롬프트나
+  실측 우선순위 계산에 넣지 않는다. 선택된 항목에만 코드로 붙이며, 링크가 있다는 이유로
+  탈락한 항목을 강제로 올리지 않는다. 링크 자료가 본문의 조건·한계를 대신하지도 않는다.
+- 같은 snapshot의 depth2·depth3에서 해당 항목을 선택하면 같은 링크가 따라간다.
+  Slack은 본문 plain text를 유지하면서 별도 [구조화 링크](https://docs.slack.dev/reference/block-kit/block-elements/link-element/)로 표시한다.
+  추가 인터랙션 endpoint/권한은 요구하지 않는다. depth3 원본은 바꾸지 않는다.
+- 기존 sealed snapshot/pair는 설정 변경 후에도 재사용되며 링크를 소급 주입하지 않는다.
+  연결을 바꿀 때는 새 OUTPUT_DIR에서 새 수집·검증을 수행한다. 기존 산출물은 보존한다.
+- 보존 대상은 보고서와 **참조 메타데이터**다. 같은 URL로 재발행된 아티팩트 본문까지
+  보존하는 기능은 아니다. 변경 불가 commit URL이나 별도 원본 파일 보관을 병행한다.
+
+현재 1차 범위는 Notion 업무 항목 연결이다. Git 커밋만 선택된 항목으로의 자동 이관,
+아티팩트 본문 보관·자동 업로드, 실제 팀 열람 검사 및 URL 생존 감시는 포함하지 않는다.
+
 정기 pair 운영으로 전환할 때는 `.env`에 확인된 위 다섯 Slack ID를 모두 두고,
 기존 단일-depth 두 작업을 아래 세 작업으로 교체한다. publish와 send는 별도 실행이므로
 Redmine 게시가 실패해도 보존된 depth3 상세본은 독립적으로 발송할 수 있다.
