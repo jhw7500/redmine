@@ -155,8 +155,13 @@ rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh preview
 # 아래 둘 중 하나만 선택한다. 인자 생략 시 depth2.
 rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh publish 2
 rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh publish 3
-# 수신처 확정·발송 승인 후: notify 앱과 본인의 1:1 대화 ID(D로 시작)
-rtk env MEETING_DATE=2026-09-16 SLACK_BRIEFING_CHANNEL_ID=D0123456789 ./run-weekly-pair-env.sh send
+# 아래 다섯 비밀 아닌 ID를 .env에 고정하고 수신처 확정·발송 승인을 받은 뒤 실행한다.
+# SLACK_BRIEFING_CHANNEL_ID=D0123456789
+# SLACK_BRIEFING_TEAM_ID=T0123456789
+# SLACK_BRIEFING_BOT_ID=B0123456789
+# SLACK_BRIEFING_BOT_USER_ID=U0123456789
+# SLACK_BRIEFING_PEER_USER_ID=U9876543210
+rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh send
 ```
 
 Slack은 짧은 부모 메시지 + 항목별 세로 스레드이며, 긴 원문은 생략하지 않고 여러 메시지로
@@ -165,6 +170,11 @@ Slack은 짧은 부모 메시지 + 항목별 세로 스레드이며, 긴 원문�
 기존 Repowire bot_token(또는 SLACK_BOT_TOKEN)을 재사용하지만, 개인 상세본의 수신처를 기존
 실패 알림 채널에서 자동 선택하지 않는다. `SLACK_BRIEFING_CHANNEL_ID`는 `D`로 시작하는
 본인과 `notify` 앱의 1:1 대화 ID를 별도로 지정해야 하며 공개·비공개 채널 ID는 거부한다.
+대화 ID 모양만 신뢰하지 않는다. 상세본문을 보내기 전에 Slack `auth.test`와
+`conversations.info`로 workspace(`TEAM_ID`), bot/app(`BOT_ID`, `BOT_USER_ID`), 본인
+(`PEER_USER_ID`)을 조회해 위 승인값과 모두 일치하고 외부 공유가 아닌 1:1 DM인지 확인한다.
+확인된 비밀 아닌 신원은 delivery manifest에 저장해 부분 재시도가 다른 신원으로 이어지지
+않게 한다. `conversations.info`를 위해 notify 앱에는 `im:read` scope가 필요하다.
 Slack 전송 실패는 Redmine 재게시를 유발하지 않는다. 확인된 메시지는 재전송하지 않고,
 응답이 불확실하거나 기록이 손상되면 자동 재시도를 막아 중복 전송을 피한다.
 준비 때 저장한 `slack.depth3.json`과 발송 직전 재생성한 본문이 byte 단위로 다르면 네트워크
@@ -172,7 +182,7 @@ Slack 전송 실패는 Redmine 재게시를 유발하지 않는다. 확인된 �
 부모 1개와 상세 답글 27개를 보내 Slack 응답 28건과 모바일 표시를 확인했다. 이는 일회성
 파일럿이며 정기 수신처 설정과 cron 전환을 뜻하지 않는다.
 
-정기 pair 운영으로 전환할 때는 `.env`에 확인된 `SLACK_BRIEFING_CHANNEL_ID=D...`를 두고,
+정기 pair 운영으로 전환할 때는 `.env`에 확인된 위 다섯 Slack ID를 모두 두고,
 기존 단일-depth 두 작업을 아래 세 작업으로 교체한다. publish와 send는 별도 실행이므로
 Redmine 게시가 실패해도 보존된 depth3 상세본은 독립적으로 발송할 수 있다.
 
