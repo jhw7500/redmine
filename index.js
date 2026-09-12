@@ -35,6 +35,7 @@ const {
   writeTextAtomic,
 } = require("./lib/report-artifact");
 const { collectSnapshot, loadSnapshot } = require("./lib/report-snapshot");
+const { assertReferenceGenerationMode } = require("./lib/report-references");
 const { pruneRunArtifacts } = require("./lib/report-run-pruner");
 const {
   blockingWarnings,
@@ -647,6 +648,7 @@ function writeGenerationStateIfOwned(statePath, attemptId, patch) {
 
 async function runGenerateV1(config, meetingDate) {
   const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
+  assertReferenceGenerationMode(snapshot, config.env.aiGenerationMethod);
   const expectedReportPath = buildOutputPath(meetingDate, config);
   const generationStatePath = buildGenerationStatePath(expectedReportPath);
   const startedAt = new Date().toISOString();
@@ -786,6 +788,7 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
   if (selectionMode) assertSourceSelectionConfig(config);
   runAutomaticPrune(config, dependencies);
   const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
+  assertReferenceGenerationMode(snapshot, config.env.aiGenerationMethod);
   const reportPath = buildOutputPath(meetingDate, config);
   const generationStatePath = buildGenerationStatePath(reportPath);
   const meetingDateText = formatDate(meetingDate);
