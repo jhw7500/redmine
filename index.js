@@ -250,7 +250,6 @@ function assertWeeklyProfile(config, mode) {
   const env = config && config.env;
   const expected = mode === "weekly-publish" ? {
     autoApprove: true,
-    reportDepth: 3,
     validationMode: "block",
     validationOverride: false,
     presentationNoteMode: "suggest",
@@ -262,12 +261,12 @@ function assertWeeklyProfile(config, mode) {
     aiGenerationMethod: "source_selection",
     aiGenerationScope: "whole",
     sourceSelectionFallback: true,
-    reportDepth: 3,
     validationMode: "block",
     validationOverride: false,
     presentationNoteMode: "suggest",
   };
   if (!env) throw new Error("[weekly] configuration is required");
+  if (![2, 3].includes(env.reportDepth)) throw new Error(`[weekly] ${mode} requires reportDepth=2 or 3`);
   for (const [field, value] of Object.entries(expected)) {
     if (env[field] !== value) {
       throw new Error(`[weekly] ${mode} requires ${field}=${value}`);
@@ -419,7 +418,7 @@ async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
   let state = createWeeklyAttempt({
     outputDir: config.env.outputDir,
     meetingDate: meetingDateText,
-    reportDepth: 3,
+    reportDepth: config.env.reportDepth,
     attemptId,
     now,
   });
@@ -489,7 +488,7 @@ async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
         || generationState.schemaVersion !== 2
         || generationState.status !== "complete"
         || generationState.generationMethod !== "source_selection"
-        || generationState.reportDepth !== 3
+        || generationState.reportDepth !== config.env.reportDepth
       ) {
         throw new Error("weekly READY evidence metadata mismatch");
       }
@@ -1748,14 +1747,12 @@ async function runUpdate(config, meetingDate, options = {}) {
       : validateV1Ready(publishContent);
   };
 
-  // 발표노트 자동 등록은 프로젝트 정책상 운영 프로필인 depth3 update에서만 수행한다.
-  const candidates = Number(config.env.reportDepth) === 3
-    ? selectPresentationNotes(
+  // Publication policy is independent of the report's display depth.
+  const candidates = selectPresentationNotes(
       snapshot.presentationCandidates || [],
       config.env.presentationNoteMode
-    )
-    : [];
-  if (Number(config.env.reportDepth) === 3 && !candidates.length) {
+    );
+  if (!candidates.length) {
     const notice = describeEmptySelection(
       snapshot.presentationCandidates || [],
       config.env.presentationNoteMode
@@ -1797,7 +1794,7 @@ async function runUpdate(config, meetingDate, options = {}) {
   });
   // 발표완료 태그가 붙은 노트의 이슈를 종료한다. 게시가 끝난 뒤에만 수행하고,
   // 종료 실패가 주간 게시를 되돌리지 않도록 여기서 삼킨다.
-  if (Number(config.env.reportDepth) === 3 && process.env.NOTION_API_KEY) {
+  if (config.env.presentationNoteMode !== 'off' && process.env.NOTION_API_KEY) {
     try {
       const issueEnv = buildIssueEnv(config);
       const done = await (options.queryCompletedNotes || queryCompletedNotes)(issueEnv);
@@ -1837,6 +1834,26 @@ async function main() {
       return runWeeklyPrepare(config, meetingDate);
     case "weekly-publish":
       return runWeeklyPublish(config, meetingDate);
+    case "weekly-pair-prepare": {
+      const result = await require("./lib/weekly-report-pair").prepareWeeklyPair(config, meetingDate);
+      console.log(`[pair] depth2 + depth3 preserved: ${result.manifestPath}`);
+      return result;
+    }
+    case "weekly-pair-preview": {
+      const result = require("./lib/weekly-report-pair").previewWeeklyPair(config, meetingDate);
+      for (const message of [result.root, ...result.replies]) console.log(`\n${message.text}\n`);
+      return result;
+    }
+    case "weekly-pair-publish": {
+      const depth = config.env.weeklyPublishDepth ?? "2";
+      if (!["2", "3"].includes(depth)) throw new Error("WEEKLY_PUBLISH_DEPTH must be 2 or 3");
+      return require("./lib/weekly-report-pair").publishWeeklyPair(config, meetingDate, {depth:Number(depth)});
+    }
+    case "weekly-pair-send": {
+      const result = await require("./lib/weekly-report-pair").sendWeeklyPair(config, meetingDate);
+      console.log(`[pair][slack] sent=${result.sent} skipped=${result.skipped} thread=${result.threadTs}`);
+      return result;
+    }
     case "generate": {
       const result = await runGenerate(config, meetingDate);
       // update의 게시 게이트와 같은 기준을 쓴다. 다르면 게시 가능한 WARNING이
@@ -1856,7 +1873,7 @@ async function main() {
       return result;
     }
     default:
-      throw new Error(`Unknown MODE: ${config.env.mode}. Use collect, generate, weekly-prepare, weekly-publish, update, revalidate, or prune.`);
+      throw new Error(`Unknown MODE: ${config.env.mode}. Use collect, generate, weekly-prepare, weekly-publish, weekly-pair-prepare, weekly-pair-preview, weekly-pair-publish, weekly-pair-send, update, revalidate, or prune.`);
   }
 }
 
