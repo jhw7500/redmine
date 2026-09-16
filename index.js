@@ -1648,6 +1648,7 @@ function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, 
     validation: effectiveValidation,
     run,
     generationProvider: promptInput.provider,
+    generationOrigin: selectionContext?.evidence?.origin || "ai",
   };
 }
 
@@ -1721,10 +1722,12 @@ async function runUpdate(config, meetingDate, options = {}) {
   let validation;
   let validationPath;
   let generationProvider;
+  let generationOrigin;
   if (generation.state.schemaVersion === 2) {
     const ready = validateV2Ready();
     const { evidence } = ready;
     generationProvider = evidence.generationProvider;
+    generationOrigin = evidence.generationOrigin;
     validation = ready.validation;
     validationPath = path.join(
       evidence.run.paths.runDir,
@@ -1807,6 +1810,7 @@ async function runUpdate(config, meetingDate, options = {}) {
     draftContent: reportContent,
     loadNoteRefs,
     generationProvider,
+    generationOrigin,
     publishedPath,
     onBeforeExternalWrite: options.onBeforeExternalWrite,
     onFinalSection: options.onFinalSection,
