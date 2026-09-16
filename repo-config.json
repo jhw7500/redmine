@@ -49,6 +49,14 @@
           "audience": "on_request",
           "version": "2026-09-09",
           "url": "https://app.notion.com/p/MAX9296-camera4-360p-120-FPS-VPU-ISP-3ce8a230a04e81d5a6fdee417578d946"
+        },
+        {
+          "sourceId": "notion:3d88a230-a04e-816d-bd6b-da212b525920",
+          "referencePageId": "3d88a230-a04e-816d-bd6b-da212b525920",
+          "label": "Rate 고정·제한 운영안",
+          "audience": "on_request",
+          "version": "2026-09-11",
+          "url": "https://claude.ai/code/artifact/cc15a8af-b891-40d8-8ad0-9248fc3462ec"
         }
       ],
       "projectMapping": {
