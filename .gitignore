@@ -1,6 +1,10 @@
 .env
 out/
 
+# 세션 핸드오프 체크포인트 — 크래시·compact 대비 로컬 보호막.
+# 영구 기록은 Notion 이 맡는다 (PR #70 에서 저장소 비보관으로 결정).
+HANDOFF.*.md
+
 # Tool directories
 .bkit/
 .omc/
