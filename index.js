@@ -246,27 +246,41 @@ async function runCollect(config, meetingDate) {
   return result;
 }
 
+// weekly-prepare는 provider를 골라쓸 수 있지만, 고른 뒤에는 모델이 고정된다.
+// 한 provider가 리미트에 걸려도 주간 보고가 멈추지 않게 하려는 것이다.
+const WEEKLY_PREPARE_PROVIDER_MODELS = { codex: "gpt-5.6-sol", claude: "sonnet" };
+
 function assertWeeklyProfile(config, mode) {
   if (!["weekly-prepare", "weekly-publish"].includes(mode)) return;
   const env = config && config.env;
-  const expected = mode === "weekly-publish" ? {
-    autoApprove: true,
-    validationMode: "block",
-    validationOverride: false,
-    presentationNoteMode: "suggest",
-  } : {
-    aiSummarize: true,
-    aiProvider: "codex",
-    aiModel: "gpt-5.6-sol",
-    aiEffort: "low",
-    aiGenerationMethod: "source_selection",
-    aiGenerationScope: "whole",
-    sourceSelectionFallback: true,
-    validationMode: "block",
-    validationOverride: false,
-    presentationNoteMode: "suggest",
-  };
   if (!env) throw new Error("[weekly] configuration is required");
+  let expected;
+  if (mode === "weekly-publish") {
+    expected = {
+      autoApprove: true,
+      validationMode: "block",
+      validationOverride: false,
+      presentationNoteMode: "suggest",
+    };
+  } else {
+    const aiModel = WEEKLY_PREPARE_PROVIDER_MODELS[env.aiProvider];
+    if (!aiModel) {
+      const allowed = Object.keys(WEEKLY_PREPARE_PROVIDER_MODELS).join(" or ");
+      throw new Error(`[weekly] ${mode} requires aiProvider=${allowed}`);
+    }
+    expected = {
+      aiSummarize: true,
+      aiProvider: env.aiProvider,
+      aiModel,
+      aiEffort: "low",
+      aiGenerationMethod: "source_selection",
+      aiGenerationScope: "whole",
+      sourceSelectionFallback: true,
+      validationMode: "block",
+      validationOverride: false,
+      presentationNoteMode: "suggest",
+    };
+  }
   if (![2, 3].includes(env.reportDepth)) throw new Error(`[weekly] ${mode} requires reportDepth=2 or 3`);
   for (const [field, value] of Object.entries(expected)) {
     if (env[field] !== value) {

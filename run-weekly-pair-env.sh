@@ -2,15 +2,19 @@
 set -euo pipefail
 
 usage() {
-  echo 'usage: run-weekly-pair-env.sh prepare | preview | publish [2|3] | send' >&2
+  echo 'usage: run-weekly-pair-env.sh prepare [codex|claude] | preview | publish [2|3] | send' >&2
   exit 64
 }
 
 export WEEKLY_PUBLISH_DEPTH=2
 case ${1:-} in
   prepare)
-    [[ $# -eq 1 ]] || usage
-    export REDMINE_WEEKLY_PROFILE=prepare
+    [[ $# -le 2 ]] || usage
+    case ${2:-codex} in
+      codex) export REDMINE_WEEKLY_PROFILE=prepare ;;
+      claude) export REDMINE_WEEKLY_PROFILE=prepare-claude ;;
+      *) usage ;;
+    esac
     ;;
   preview|send)
     [[ $# -eq 1 ]] || usage
