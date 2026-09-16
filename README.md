@@ -151,6 +151,10 @@ OUTPUT_DIR/pairs/YYYY-MM-DD/
 
 ```bash
 rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh prepare
+# codex 가 쿼터에 걸리면 provider 를 인자로 바꾼다. 인자 생략 시 codex.
+# provider 를 고르면 모델은 따라 고정된다(codex→gpt-5.6-sol, claude→sonnet).
+# 상속된 AI_PROVIDER/AI_MODEL 은 어느 경우에도 무시된다.
+rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh prepare claude
 rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh preview
 # 아래 둘 중 하나만 선택한다. 인자 생략 시 depth2.
 rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh publish 2
@@ -181,6 +185,22 @@ Slack 전송 실패는 Redmine 재게시를 유발하지 않는다. 확인된 �
 요청 전에 중단한다. 2026-09-12에는 저장된 09-09 실제 Codex depth3로 `notify` 1:1 대화에
 부모 1개와 상세 답글 27개를 보내 Slack 응답 28건과 모바일 표시를 확인했다. 이는 일회성
 파일럿이며 정기 수신처 설정과 cron 전환을 뜻하지 않는다.
+
+### 아티팩트·자료 링크를 보고서에 싣는 두 방법
+
+**1. Notion `summary`에 직접 쓴다 (기본, 권장).** 보고서는 Notion 항목의 `summary`를
+그대로 `↳ 출처 요약:` 줄로 옮긴다(`lib/merger.js`). 따라서 Notion 정리 단계에서 해당
+주제의 `summary`에 아티팩트·자료 URL을 함께 써 두면 별도 등록 없이 보고서와 Slack에
+그대로 실린다. URL은 fact-validator의 수치·버전 토큰 패턴에 걸리지 않아
+`unsupported_fact_token`을 유발하지 않는다. `summary`는 선택 단계의 키워드 매칭에도
+쓰이므로 자료가 달린 항목이 보고서에 뽑힐 여지도 함께 늘어난다.
+
+**2. `reportReferences`에 등록한다 (아래).** 독자를 구분해야 하는 자료
+(`audience: on_request` → `· 요청 시 공유` 표기)나, 업무 항목과 자료 페이지가 서로 다른
+문서여서 `summary` 한 줄로 담기 어려운 경우에 쓴다.
+
+두 방법 모두 **그 항목이 해당 주 보고서 선택에 뽑혀야** 링크가 나온다. depth2는 상위
+20건만 싣기 때문에 뽑히지 않으면 링크도 함께 빠진다.
 
 ### 관련 상세자료 URL (명시적 연결, opt-in)
 
