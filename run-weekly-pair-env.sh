@@ -10,7 +10,7 @@ export WEEKLY_PUBLISH_DEPTH=2
 case ${1:-} in
   prepare)
     [[ $# -le 2 ]] || usage
-    case ${2:-codex} in
+    case ${2-codex} in
       codex) export REDMINE_WEEKLY_PROFILE=prepare ;;
       claude) export REDMINE_WEEKLY_PROFILE=prepare-claude ;;
       *) usage ;;

@@ -263,14 +263,15 @@ function assertWeeklyProfile(config, mode) {
       presentationNoteMode: "suggest",
     };
   } else {
-    const aiModel = WEEKLY_PREPARE_PROVIDER_MODELS[env.aiProvider];
+    const aiModel = Object.hasOwn(WEEKLY_PREPARE_PROVIDER_MODELS, env.aiProvider)
+      ? WEEKLY_PREPARE_PROVIDER_MODELS[env.aiProvider]
+      : undefined;
     if (!aiModel) {
       const allowed = Object.keys(WEEKLY_PREPARE_PROVIDER_MODELS).join(" or ");
       throw new Error(`[weekly] ${mode} requires aiProvider=${allowed}`);
     }
     expected = {
       aiSummarize: true,
-      aiProvider: env.aiProvider,
       aiModel,
       aiEffort: "low",
       aiGenerationMethod: "source_selection",
