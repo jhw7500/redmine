@@ -56,10 +56,15 @@ unset _requested_weekly_profile
 case $_weekly_profile in
   "")
     ;;
-  prepare)
+  prepare|prepare-claude)
     export AI_SUMMARIZE=1
-    export AI_PROVIDER=codex
-    export AI_MODEL=gpt-5.6-sol
+    if [[ $_weekly_profile == prepare-claude ]]; then
+      export AI_PROVIDER=claude
+      export AI_MODEL=sonnet
+    else
+      export AI_PROVIDER=codex
+      export AI_MODEL=gpt-5.6-sol
+    fi
     export AI_EFFORT=low
     export AI_GENERATION_METHOD=source_selection
     export AI_GENERATION_SCOPE=whole
