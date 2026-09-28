@@ -151,7 +151,12 @@ OUTPUT_DIR/pairs/YYYY-MM-DD/
 
 ```bash
 rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh prepare
-# codex 가 쿼터에 걸리면 provider 를 인자로 바꾼다. 인자 생략 시 codex.
+# 인자를 생략하면 codex 로 돌고, 쿼터로 AI 선택이 비면 claude 로 1회 자동 우회한다.
+# 우회 산출물은 out/provider-fallback/<UTC타임스탬프>/ 에 따로 만들어져 원래 증거를
+# 보존하고, 뒤따르는 publish/send 는 out/weekly-active-output-dir.json 포인터를 보고
+# 그쪽을 쓴다(24시간이 지난 포인터는 무시). 규칙 위반 등 쿼터 외의 이유로 fallback 이
+# 된 경우에는 우회하지 않는다. provider 를 인자로 명시하거나 OUTPUT_DIR 을 직접 주면
+# 우회도 포인터도 적용되지 않는다.
 # provider 를 고르면 모델은 따라 고정된다(codex→gpt-5.6-sol, claude→sonnet).
 # 상속된 AI_PROVIDER/AI_MODEL 은 어느 경우에도 무시된다.
 rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh prepare claude
