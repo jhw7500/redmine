@@ -152,11 +152,16 @@ OUTPUT_DIR/pairs/YYYY-MM-DD/
 ```bash
 rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh prepare
 # 인자를 생략하면 codex 로 돌고, 쿼터로 AI 선택이 비면 claude 로 1회 자동 우회한다.
+# depth3 에서 검증이 막혀 1차가 비정상 종료해도 남은 증거로 쿼터를 판정해 우회한다.
 # 우회 산출물은 out/provider-fallback/<UTC타임스탬프>/ 에 따로 만들어져 원래 증거를
 # 보존하고, 뒤따르는 publish/send 는 out/weekly-active-output-dir.json 포인터를 보고
-# 그쪽을 쓴다(24시간이 지난 포인터는 무시). 규칙 위반 등 쿼터 외의 이유로 fallback 이
-# 된 경우에는 우회하지 않는다. provider 를 인자로 명시하거나 OUTPUT_DIR 을 직접 주면
-# 우회도 포인터도 적용되지 않는다.
+# 그쪽을 쓴다. 포인터는 만료되지 않는다 — send 의 중복 전송 방지와 publish 의 중복
+# 게시 방지가 모두 <OUTPUT_DIR>/pairs/<date>/ 아래 영수증에 의존하므로, 시간이 지나
+# base 로 되돌아가면 그 영수증을 못 보고 Slack 을 재전송하고 위키를 덮어쓴다. 대신
+# prepare 가 시작할 때 지난 포인터를 지우고, 읽을 때 대상이 그 회의 pair 를 여전히
+# 갖고 있는지 확인한다. 규칙 위반 등 쿼터 외의 이유로 fallback 이 된 경우에는
+# 우회하지 않는다. provider 를 인자로 명시하거나 OUTPUT_DIR 을 직접 주면 우회도
+# 포인터도 적용되지 않는다.
 # provider 를 고르면 모델은 따라 고정된다(codex→gpt-5.6-sol, claude→sonnet).
 # 상속된 AI_PROVIDER/AI_MODEL 은 어느 경우에도 무시된다.
 rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh prepare claude
