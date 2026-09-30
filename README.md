@@ -113,6 +113,9 @@ depth3의 원문 기반 대체보고서는 본문 또는 부모 문맥에 상세
 `배경`·`변경`·`검증` 근거를 각각 최대 한 줄, 전체 최대 3줄로 수집한다. 각 줄은 220자로
 제한하고 서명 trailer·세션 링크·코드 블록은 제외하며, body가 없으면 기존 subject만 사용한다.
 번역 규칙은 subject에만 적용하고 body 근거는 그대로 sealed snapshot과 source record에 보존한다.
+workflow/CI 분류도 subject만 사용하므로 body의 검증 도구명이 원래 카테고리를 바꾸지 않는다.
+지원되는 API key·Authorization·Slack token·credential URL 패턴이 body에서 탐지되면 원문을
+출력하지 않고 `COMMIT_BODY_CREDENTIAL_DETECTED`로 전체 수집을 중단한다.
 depth3에서 선택된 git-only 항목이 80자 미만 subject만 갖고 있으면
 `source_selection_git_detail_thin` 비차단 경고로 식별한다.
 실패한 생성물은 아래의 rejected 경로에 보존한다. 원문·선택 분량을 확인한 뒤 새
