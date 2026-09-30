@@ -124,6 +124,7 @@ JSON/YAML 인용 키와 Markdown 강조·inline-code로 감싼 키도 같은 할
 Markdown `_..._`로 감싼
 standalone GitHub·Slack token도 동일하게 차단한다.
 숫자 entity는 선행 0을 포함한 전체 숫자열을 소비한 뒤 코드포인트를 검증한다.
+Markdown inline·reference link의 label로 감싼 credential key도 렌더링 기준으로 복원해 차단한다.
 JSON Unicode escape로 표현한 키와 `Authorization=Bearer ...` 할당도 같은 credential로 취급한다.
 backslash-escaped JSON과 Authorization 값 전체를 감싼 Markdown 강조도 차단한다.
 shell append assignment(`+=`), serialized JSON whitespace escape, 다중 JSON 직렬화도 같은
@@ -139,7 +140,8 @@ commit body 수집이 활성화된 구성에서는 현재 credential-scan 계약
 재사용하지 않는다. `collect`는 이를 복제 보관하지 않고 안전한 재수집 결과로 교체하며,
 `generate`·`update` 직접 로드는 `SNAPSHOT_SECURITY_CONTRACT_MISSING`으로 중단한다.
 이 계약은 commit body 수집 대상 repo 키 목록까지 봉인하므로 기능 활성화나 대상 변경 뒤에는
-기존 snapshot을 재사용하지 않는다. Git 결과가 비어 있어도 repo 집합 계약은 검사한다.
+기존 snapshot을 재사용하지 않는다. 실제 수집 가능했던 repo 집합도 별도로 봉인해 unavailable repo가
+복구된 뒤에는 이전 snapshot을 재사용하지 않는다. Git 결과가 비어 있어도 repo 집합 계약은 검사한다.
 Git log가 비정상 종료되면 빈 성공으로 바꾸지 않고
 `GIT_LOG_FAILED` 수집 실패로 기록한다.
 depth3에서 선택된 git-only 항목이 80자 미만 subject만 갖고 있으면
