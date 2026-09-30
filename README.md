@@ -125,6 +125,8 @@ credential로 취급한다. JSON에서 escape된 URL 구분자(`\/`)도 복원�
 제한된 반복 안에 끝나지 않아도 안전하게 수집을 중단한다.
 GitHub의 standalone access token prefix(`ghp_`, `github_pat_`, `gho_`, `ghu_`, `ghs_`,
 `ghr_`)도 assignment 문맥 없이 credential로 차단한다.
+Slack의 standalone·rotation token prefix(`xoxb-`, `xoxp-`, `xapp-`, `xwfp-`,
+`xoxe-`, `xoxe.xoxb-`, `xoxe.xoxp-`, `xoxc-`, `xoxd-`)도 같은 방식으로 차단한다.
 이 오류는 `ALLOW_PARTIAL_SNAPSHOT=1`로 우회되지 않으며 snapshot·candidate를 만들지 않는다.
 commit body 수집이 활성화된 구성에서는 현재 credential-scan 계약이 없는 기존 sealed snapshot을
 재사용하지 않는다. `collect`는 이를 복제 보관하지 않고 안전한 재수집 결과로 교체하며,
