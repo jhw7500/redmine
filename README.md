@@ -127,6 +127,7 @@ GitHub의 standalone access token prefix(`ghp_`, `github_pat_`, `gho_`, `ghu_`, 
 `ghr_`)도 assignment 문맥 없이 credential로 차단한다.
 Slack의 standalone·rotation token prefix(`xoxb-`, `xoxp-`, `xapp-`, `xwfp-`,
 `xoxe-`, `xoxe.xoxb-`, `xoxe.xoxp-`, `xoxc-`, `xoxd-`)도 같은 방식으로 차단한다.
+Markdown backslash escape로 prefix 구두점을 감춘 표현도 렌더링 전 원형으로 복원해 차단한다.
 이 오류는 `ALLOW_PARTIAL_SNAPSHOT=1`로 우회되지 않으며 snapshot·candidate를 만들지 않는다.
 commit body 수집이 활성화된 구성에서는 현재 credential-scan 계약이 없는 기존 sealed snapshot을
 재사용하지 않는다. `collect`는 이를 복제 보관하지 않고 안전한 재수집 결과로 교체하며,
