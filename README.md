@@ -121,7 +121,8 @@ JSON/YAML 인용 키와 Markdown 강조·inline-code로 감싼 키도 같은 할
 JSON Unicode escape로 표현한 키와 `Authorization=Bearer ...` 할당도 같은 credential로 취급한다.
 backslash-escaped JSON과 Authorization 값 전체를 감싼 Markdown 강조도 차단한다.
 shell append assignment(`+=`), serialized JSON whitespace escape, 다중 JSON 직렬화도 같은
-credential로 취급한다. 직렬화 정규화가 제한된 반복 안에 끝나지 않아도 안전하게 수집을 중단한다.
+credential로 취급한다. JSON에서 escape된 URL 구분자(`\/`)도 복원해 검사하며, 직렬화 정규화가
+제한된 반복 안에 끝나지 않아도 안전하게 수집을 중단한다.
 이 오류는 `ALLOW_PARTIAL_SNAPSHOT=1`로 우회되지 않으며 snapshot·candidate를 만들지 않는다.
 commit body 수집이 활성화된 구성에서는 현재 credential-scan 계약이 없는 기존 sealed snapshot을
 재사용하지 않는다. `collect`는 이를 복제 보관하지 않고 안전한 재수집 결과로 교체하며,
