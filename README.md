@@ -119,10 +119,14 @@ workflow/CI 분류도 subject만 사용하므로 body의 검증 도구명이 원
 탐지되면 원문을 출력하지 않고 `COMMIT_BODY_CREDENTIAL_DETECTED`로 전체 수집을 중단한다.
 JSON/YAML 인용 키와 Markdown 강조·inline-code로 감싼 키도 같은 할당으로 취급한다.
 JSON Unicode escape로 표현한 키와 `Authorization=Bearer ...` 할당도 같은 credential로 취급한다.
+backslash-escaped JSON과 Authorization 값 전체를 감싼 Markdown 강조도 차단한다.
 이 오류는 `ALLOW_PARTIAL_SNAPSHOT=1`로 우회되지 않으며 snapshot·candidate를 만들지 않는다.
 commit body 수집이 활성화된 구성에서는 현재 credential-scan 계약이 없는 기존 sealed snapshot을
 재사용하지 않는다. `collect`는 이를 복제 보관하지 않고 안전한 재수집 결과로 교체하며,
 `generate`·`update` 직접 로드는 `SNAPSHOT_SECURITY_CONTRACT_MISSING`으로 중단한다.
+이 계약은 commit body 수집 대상 repo 키 목록까지 봉인하므로 기능 활성화나 대상 변경 뒤에는
+기존 snapshot을 재사용하지 않는다. Git log가 비정상 종료되면 빈 성공으로 바꾸지 않고
+`GIT_LOG_FAILED` 수집 실패로 기록한다.
 depth3에서 선택된 git-only 항목이 80자 미만 subject만 갖고 있으면
 `source_selection_git_detail_thin` 비차단 경고로 식별한다.
 실패한 생성물은 아래의 rejected 경로에 보존한다. 원문·선택 분량을 확인한 뒤 새
