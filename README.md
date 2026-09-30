@@ -108,6 +108,13 @@ depth3의 원문 기반 대체보고서는 본문 또는 부모 문맥에 상세
 모든 자식을 필수 선택하지는 않는다. 상세 항목이 누락되면 `source_selection_detail_missing`으로
 게시를 차단하며, 검증 JSON에 원문 ID·섹션·항목명과 복구 안내를 남긴다. 경고 허용이나
 수동 override로 우회할 수 없고, 과거 WARNING 대체본도 게시 직전에 재검사한다.
+
+`repo-config.json`의 저장소에 `includeCommitBody: true`를 지정하면 commit body에서 원문 기반
+`배경`·`변경`·`검증` 근거를 각각 최대 한 줄, 전체 최대 3줄로 수집한다. 각 줄은 220자로
+제한하고 서명 trailer·세션 링크·코드 블록은 제외하며, body가 없으면 기존 subject만 사용한다.
+번역 규칙은 subject에만 적용하고 body 근거는 그대로 sealed snapshot과 source record에 보존한다.
+depth3에서 선택된 git-only 항목이 80자 미만 subject만 갖고 있으면
+`source_selection_git_detail_thin` 비차단 경고로 식별한다.
 실패한 생성물은 아래의 rejected 경로에 보존한다. 원문·선택 분량을 확인한 뒤 새
 `generate`/`weekly-prepare`가 필요하며, 단순 `revalidate`는 고정된 선택을 바꾸지 않는다.
 depth3의 정상 AI 선택 규칙은 변경하지 않는다.
