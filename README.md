@@ -117,6 +117,7 @@ workflow/CI 분류도 subject만 사용하므로 body의 검증 도구명이 원
 지원되는 API key·Authorization·Slack token·webhook·credential URL 패턴과
 `REDMINE_API_KEY`·`GITHUB_TOKEN`·`NOTION_API_KEY`·Slack credential 환경변수 할당이 body에서
 탐지되면 원문을 출력하지 않고 `COMMIT_BODY_CREDENTIAL_DETECTED`로 전체 수집을 중단한다.
+JSON/YAML 인용 키와 Markdown 강조·inline-code로 감싼 키도 같은 할당으로 취급한다.
 이 오류는 `ALLOW_PARTIAL_SNAPSHOT=1`로 우회되지 않으며 snapshot·candidate를 만들지 않는다.
 depth3에서 선택된 git-only 항목이 80자 미만 subject만 갖고 있으면
 `source_selection_git_detail_thin` 비차단 경고로 식별한다.
