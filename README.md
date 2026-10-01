@@ -116,7 +116,8 @@ depth3의 원문 기반 대체보고서는 본문 또는 부모 문맥에 상세
 workflow/CI 분류도 subject만 사용하므로 body의 검증 도구명이 원래 카테고리를 바꾸지 않는다.
 `<`, `>`, `[`, `]` 또는 underscore emphasis delimiter 쌍이 포함된 commit body는
 Markdown/HTML 구조를 직접 해석하지 않고 상세 근거 전체를 제외해 subject만 사용한다.
-Unicode 식별자 내부의 underscore와 backslash로 escape된 delimiter는 markup으로 취급하지 않는다.
+Unicode 식별자 내부의 underscore는 markup으로 취급하지 않는다. 반면 delimiter 후보 앞의
+backslash 개수는 해석하지 않고 보수적으로 body 상세를 제외한다.
 그 외 평문 body는 지원되는 API key·Authorization·
 Slack token·webhook·credential URL 패턴과
 `REDMINE_API_KEY`·`GITHUB_TOKEN`·`NOTION_API_KEY`·Slack credential 환경변수 할당이 body에서
