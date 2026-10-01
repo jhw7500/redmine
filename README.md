@@ -108,6 +108,46 @@ depth3의 원문 기반 대체보고서는 본문 또는 부모 문맥에 상세
 모든 자식을 필수 선택하지는 않는다. 상세 항목이 누락되면 `source_selection_detail_missing`으로
 게시를 차단하며, 검증 JSON에 원문 ID·섹션·항목명과 복구 안내를 남긴다. 경고 허용이나
 수동 override로 우회할 수 없고, 과거 WARNING 대체본도 게시 직전에 재검사한다.
+
+`repo-config.json`의 저장소에 `includeCommitBody: true`를 지정하면 commit body에서 원문 기반
+`배경`·`변경`·`검증` 근거를 각각 최대 한 줄, 전체 최대 3줄로 수집한다. 각 줄은 220자로
+제한하고 서명 trailer·세션 링크·코드 블록은 제외하며, body가 없으면 기존 subject만 사용한다.
+번역 규칙은 subject에만 적용하고 body 근거는 그대로 sealed snapshot과 source record에 보존한다.
+workflow/CI 분류도 subject만 사용하므로 body의 검증 도구명이 원래 카테고리를 바꾸지 않는다.
+`<`, `>`, `[`, `]` 또는 underscore emphasis delimiter 쌍이 포함된 commit body는
+Markdown/HTML 구조를 직접 해석하지 않고 상세 근거 전체를 제외해 subject만 사용한다.
+Unicode 식별자 내부의 underscore는 markup으로 취급하지 않는다. 반면 delimiter 후보 앞의
+backslash 개수는 해석하지 않고 보수적으로 body 상세를 제외한다.
+그 외 평문 body는 지원되는 API key·Authorization·
+Slack token·webhook·credential URL 패턴과
+`REDMINE_API_KEY`·`GITHUB_TOKEN`·`NOTION_API_KEY`·Slack credential 환경변수 할당이 body에서
+탐지되면 원문을 출력하지 않고 `COMMIT_BODY_CREDENTIAL_DETECTED`로 전체 수집을 중단한다.
+JSON/YAML 인용 키와 Markdown 강조·inline-code로 감싼 키도 같은 할당으로 취급한다.
+`X-Redmine-API-Key` 헤더를 `_` 또는 `__`로 감싼 Markdown 강조도 동일하게 차단한다.
+세미콜론 유무와 관계없이 숫자·16진수·일반 HTML entity로 credential 키를 분할한 표현과
+숫자 entity는 선행 0을 포함한 전체 숫자열을 소비한 뒤 코드포인트를 검증한다.
+JSON Unicode escape로 표현한 키와 `Authorization=Bearer ...` 할당도 같은 credential로 취급한다.
+backslash-escaped JSON과 Authorization 값 전체를 감싼 Markdown 강조도 차단한다.
+shell append assignment(`+=`), serialized JSON whitespace escape, 다중 JSON 직렬화도 같은
+credential로 취급한다. JSON에서 escape된 URL 구분자(`\/`)도 복원해 검사하며, 직렬화 정규화가
+제한된 반복 안에 끝나지 않아도 안전하게 수집을 중단한다.
+GitHub의 standalone access token prefix(`ghp_`, `github_pat_`, `gho_`, `ghu_`, `ghs_`,
+`ghr_`)도 assignment 문맥 없이 credential로 차단한다.
+Slack의 standalone·rotation token prefix(`xoxb-`, `xoxp-`, `xapp-`, `xwfp-`,
+`xoxe-`, `xoxe.xoxb-`, `xoxe.xoxp-`, `xoxc-`, `xoxd-`)도 같은 방식으로 차단한다.
+Markdown backslash escape로 prefix 구두점을 감춘 표현도 렌더링 전 원형으로 복원해 차단한다.
+이 오류는 `ALLOW_PARTIAL_SNAPSHOT=1`로 우회되지 않으며 snapshot·candidate를 만들지 않는다.
+commit body 수집이 활성화된 구성에서는 현재 credential-scan 계약이 없는 기존 sealed snapshot을
+재사용하지 않는다. `collect`는 이를 복제 보관하지 않고 안전한 재수집 결과로 교체하며,
+`generate`·`update` 직접 로드는 `SNAPSHOT_SECURITY_CONTRACT_MISSING`으로 중단한다.
+이 계약은 commit body 수집 대상 repo 키 목록까지 봉인하므로 기능 활성화나 대상 변경 뒤에는
+기존 snapshot을 재사용하지 않는다. Git 소스 활성 상태를 반영한 실제 수집 가능 repo 집합도 별도로
+봉인해 unavailable repo가 복구되거나 Git 수집이 다시 활성화되면 이전 snapshot을 재사용하지 않는다.
+Git 결과가 비어 있어도 repo 집합 계약은 검사한다.
+Git log가 비정상 종료되면 빈 성공으로 바꾸지 않고
+`GIT_LOG_FAILED` 수집 실패로 기록한다.
+depth3에서 선택된 git-only 항목이 80자 미만 subject만 갖고 있으면
+`source_selection_git_detail_thin` 비차단 경고로 식별한다.
 실패한 생성물은 아래의 rejected 경로에 보존한다. 원문·선택 분량을 확인한 뒤 새
 `generate`/`weekly-prepare`가 필요하며, 단순 `revalidate`는 고정된 선택을 바꾸지 않는다.
 depth3의 정상 AI 선택 규칙은 변경하지 않는다.
