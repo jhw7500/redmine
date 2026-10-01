@@ -114,19 +114,17 @@ depth3의 원문 기반 대체보고서는 본문 또는 부모 문맥에 상세
 제한하고 서명 trailer·세션 링크·코드 블록은 제외하며, body가 없으면 기존 subject만 사용한다.
 번역 규칙은 subject에만 적용하고 body 근거는 그대로 sealed snapshot과 source record에 보존한다.
 workflow/CI 분류도 subject만 사용하므로 body의 검증 도구명이 원래 카테고리를 바꾸지 않는다.
-지원되는 API key·Authorization·Slack token·webhook·credential URL 패턴과
+`<`, `>`, `[`, `]` 중 하나라도 포함된 commit body는 Markdown/HTML 구조를 직접 해석하지 않고
+상세 근거 전체를 제외해 subject만 사용한다. 그 외 평문 body는 지원되는 API key·Authorization·
+Slack token·webhook·credential URL 패턴과
 `REDMINE_API_KEY`·`GITHUB_TOKEN`·`NOTION_API_KEY`·Slack credential 환경변수 할당이 body에서
 탐지되면 원문을 출력하지 않고 `COMMIT_BODY_CREDENTIAL_DETECTED`로 전체 수집을 중단한다.
 JSON/YAML 인용 키와 Markdown 강조·inline-code로 감싼 키도 같은 할당으로 취급한다.
 `X-Redmine-API-Key` 헤더를 `_` 또는 `__`로 감싼 Markdown 강조도 동일하게 차단한다.
-지원 credential 키를 HTML 주석이나 태그로 분할한 표현도 렌더링 기준으로 정규화해 차단한다.
 세미콜론 유무와 관계없이 숫자·16진수·일반 HTML entity로 credential 키를 분할한 표현과
 Markdown `_..._`로 감싼
 standalone GitHub·Slack token도 동일하게 차단한다.
 숫자 entity는 선행 0을 포함한 전체 숫자열을 소비한 뒤 코드포인트를 검증한다.
-Markdown inline·full-reference·shortcut-reference link 및 definition에서 credential key 구성요소가
-대괄호 안에 순서대로 나타나면 Markdown·HTML을 직접 해석하지 않고 label 전체를 fail-closed로 차단한다.
-대괄호 밖에서도 HTML markup이 credential key를 분할한 뒤 값 할당으로 이어지면 같은 방식으로 차단한다.
 JSON Unicode escape로 표현한 키와 `Authorization=Bearer ...` 할당도 같은 credential로 취급한다.
 backslash-escaped JSON과 Authorization 값 전체를 감싼 Markdown 강조도 차단한다.
 shell append assignment(`+=`), serialized JSON whitespace escape, 다중 JSON 직렬화도 같은
