@@ -124,8 +124,8 @@ JSON/YAML 인용 키와 Markdown 강조·inline-code로 감싼 키도 같은 할
 Markdown `_..._`로 감싼
 standalone GitHub·Slack token도 동일하게 차단한다.
 숫자 entity는 선행 0을 포함한 전체 숫자열을 소비한 뒤 코드포인트를 검증한다.
-Markdown inline·full-reference·shortcut-reference link의 label로 감싼 credential key도
-렌더링 기준으로 복원하거나 fail-closed로 차단한다.
+Markdown inline·full-reference·shortcut-reference link 및 definition에서 credential key 구성요소가
+대괄호 안에 순서대로 나타나면 Markdown·HTML을 직접 해석하지 않고 label 전체를 fail-closed로 차단한다.
 JSON Unicode escape로 표현한 키와 `Authorization=Bearer ...` 할당도 같은 credential로 취급한다.
 backslash-escaped JSON과 Authorization 값 전체를 감싼 Markdown 강조도 차단한다.
 shell append assignment(`+=`), serialized JSON whitespace escape, 다중 JSON 직렬화도 같은
