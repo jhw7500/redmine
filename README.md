@@ -126,6 +126,7 @@ standalone GitHub·Slack token도 동일하게 차단한다.
 숫자 entity는 선행 0을 포함한 전체 숫자열을 소비한 뒤 코드포인트를 검증한다.
 Markdown inline·full-reference·shortcut-reference link 및 definition에서 credential key 구성요소가
 대괄호 안에 순서대로 나타나면 Markdown·HTML을 직접 해석하지 않고 label 전체를 fail-closed로 차단한다.
+대괄호 밖에서도 HTML markup이 credential key를 분할한 뒤 값 할당으로 이어지면 같은 방식으로 차단한다.
 JSON Unicode escape로 표현한 키와 `Authorization=Bearer ...` 할당도 같은 credential로 취급한다.
 backslash-escaped JSON과 Authorization 값 전체를 감싼 Markdown 강조도 차단한다.
 shell append assignment(`+=`), serialized JSON whitespace escape, 다중 JSON 직렬화도 같은
