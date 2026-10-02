@@ -64,9 +64,11 @@ Notes
 - `WIKI_URL` can be the normal wiki page URL or the `/edit?section=...` URL.
 - If `WIKI_URL` is not set, the script targets the next Wednesday based on local time.
 - 자동 수집 범위는 매주 수요일 06:00 KST를 경계로 나눈다(지난 수요일 06:00부터 이번 수요일 05:59:59까지).
+  GitHub merged 시각 비교도 실행 호스트의 timezone과 관계없이 같은 KST 경계를 사용한다.
 - Workflow 요약은 핵심 항목만 출력하며, 한글에서도 'workflow'를 그대로 사용합니다.
 - `GITHUB_TOKEN`이 있으면 merged PR과 명시적으로 연결된 Issue를 조회해
   `Change Evidence Contract v1`의 목적·변경·검증 근거를 commit보다 우선 사용합니다.
+  `AUTHOR_MATCH`가 설정됐으면 author 필터를 통과한 로컬 commit과 SHA가 연결된 PR만 포함합니다.
   API 실패는 snapshot 전체 실패가 아니라 명시적 degraded mode와 commit fallback으로 기록합니다.
 
 Run
@@ -129,8 +131,9 @@ merged PR이 확인되면 PR body, 명시적으로 연결된 Issue body, structu
 않고 degraded 상태와 오류를 남긴다.
 비정형 또는 invalid-v1 본문에서 필드를 추측하거나 복구하지 않는다. PR의 `Related issue`,
 closing/reference 문법, 전체 GitHub Issue URL로 명시된 연결만 추적한다.
-사용한 근거 종류, 원문 body, PR/Issue/commit URL과 covered SHA는 sealed snapshot의
-`sources.git.changeEvidence`에 보존한다. GitHub API 실패는 `status: degraded`와 warning을
+사용한 근거 종류, 검증된 v1 원문 body, PR/Issue/commit URL과 covered SHA는 sealed snapshot의
+`sources.git.changeEvidence`에 보존한다. invalid-v1과 비정형 PR/Issue body는 분류와 finding만
+남기고 원문과 파싱 필드를 보존하지 않는다. GitHub API 실패는 `status: degraded`와 warning을
 남기되 Git 수집 자체를 partial로 바꾸지 않고 commit 근거로 계속한다.
 그 외 평문 body는 지원되는 API key·Authorization·
 Slack token·webhook·credential URL 패턴과
@@ -141,6 +144,7 @@ invalid-v1은 지원 credential이 탐지되면 중단하고, 그 밖의 경우�
 남기지 않아 검사하지 않은 본문 필드가 snapshot으로 들어가지 않는다. 비정형 Markdown/HTML
 body는 기존처럼 상세 렌더링과 provenance에서 제외하고 subject만 사용한다.
 JSON/YAML 인용 키와 Markdown 강조·inline-code로 감싼 키도 같은 할당으로 취급한다.
+Markdown link/reference와 HTML tag/comment로 credential 키를 분할한 표현도 정규화해 차단한다.
 `X-Redmine-API-Key` 헤더를 `_` 또는 `__`로 감싼 Markdown 강조도 동일하게 차단한다.
 세미콜론 유무와 관계없이 숫자·16진수·일반 HTML entity로 credential 키를 분할한 표현과
 숫자 entity는 선행 0을 포함한 전체 숫자열을 소비한 뒤 코드포인트를 검증한다.
