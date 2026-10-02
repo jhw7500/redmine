@@ -150,6 +150,8 @@ Markdown link/reference와 HTML tag/comment로 credential 키를 분할한 표�
 세미콜론 유무와 관계없이 숫자·16진수·일반 HTML entity로 credential 키를 분할한 표현과
 숫자 entity는 선행 0을 포함한 전체 숫자열을 소비한 뒤 코드포인트를 검증한다.
 JSON Unicode escape로 표현한 키와 `Authorization=Bearer ...` 할당도 같은 credential로 취급한다.
+제로폭 문자·양방향 제어문자 등 Unicode default-ignorable 문자를 키 사이에 삽입한 표현도
+검사용 문자열에서 제거한 뒤 차단한다.
 backslash-escaped JSON과 Authorization 값 전체를 감싼 Markdown 강조도 차단한다.
 shell append assignment(`+=`), serialized JSON whitespace escape, 다중 JSON 직렬화도 같은
 credential로 취급한다. JSON에서 escape된 URL 구분자(`\/`)도 복원해 검사하며, 직렬화 정규화가
@@ -160,6 +162,8 @@ Slack의 standalone·rotation token prefix(`xoxb-`, `xoxp-`, `xapp-`, `xwfp-`,
 `xoxe-`, `xoxe.xoxb-`, `xoxe.xoxp-`, `xoxc-`, `xoxd-`)도 같은 방식으로 차단한다.
 Markdown backslash escape로 prefix 구두점을 감춘 표현도 렌더링 전 원형으로 복원해 차단한다.
 이 오류는 `ALLOW_PARTIAL_SNAPSHOT=1`로 우회되지 않으며 snapshot·candidate를 만들지 않는다.
+PR이 연결한 Issue는 해당 PR과 동일한 GitHub 저장소만 조회한다. 다른 owner/repository를 가리키는
+참조는 인증 요청을 보내지 않고 change evidence를 degraded 상태로 기록한다.
 Git 수집이 활성화된 구성에서는 PR·Issue·commit 원문에 적용되는 현재 credential-scan 계약이 없는 기존 sealed snapshot을
 재사용하지 않는다. `collect`는 이를 복제 보관하지 않고 안전한 재수집 결과로 교체하며,
 `generate`·`update` 직접 로드는 `SNAPSHOT_SECURITY_CONTRACT_MISSING`으로 중단한다.
