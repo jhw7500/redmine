@@ -135,10 +135,11 @@ closing/reference 문법, 전체 GitHub Issue URL로 명시된 연결만 추적�
 `sources.git.changeEvidence`에 보존한다. invalid-v1과 비정형 PR/Issue body는 분류와 finding만
 남기고 원문과 파싱 필드를 보존하지 않는다. GitHub API 실패는 `status: degraded`와 warning을
 남기되 Git 수집 자체를 partial로 바꾸지 않고 commit 근거로 계속한다.
-그 외 평문 body는 지원되는 API key·Authorization·
+커밋 subject와 그 외 평문 body는 지원되는 API key·Authorization·
 Slack token·webhook·credential URL 패턴과
-`REDMINE_API_KEY`·`GITHUB_TOKEN`·`NOTION_API_KEY`·Slack credential 환경변수 할당이 body에서
-탐지되면 원문을 출력하지 않고 `COMMIT_BODY_CREDENTIAL_DETECTED`로 전체 수집을 중단한다.
+`REDMINE_API_KEY`·`GITHUB_TOKEN`·`NOTION_API_KEY`·Slack credential 환경변수 할당이 탐지되면
+원문을 출력하지 않고 `COMMIT_BODY_CREDENTIAL_DETECTED`로 전체 수집을 중단한다.
+subject 검사는 `includeCommitBody` 설정이나 PR 포함 여부와 관계없이 GitHub 조회와 artifact 생성 전에 적용한다.
 v1 contract로 인식된 body의 credential 검사는 `includeCommitBody` 설정과 관계없이 적용한다.
 invalid-v1은 지원 credential이 탐지되면 중단하고, 그 밖의 경우에도 fields·lists를 provenance에
 남기지 않아 검사하지 않은 본문 필드가 snapshot으로 들어가지 않는다. 비정형 Markdown/HTML
