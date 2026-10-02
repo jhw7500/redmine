@@ -124,6 +124,9 @@ backslash 개수는 해석하지 않고 보수적으로 body 상세를 제외한
 검증한 뒤 `Why`·`Changes`·`Validation`을 각각 목적·변경·검증 근거로 사용한다. 같은 변경의
 merged PR이 확인되면 PR body, 명시적으로 연결된 Issue body, structured commit, commit subject
 순으로 결합하고 PR의 merge/commit SHA와 겹치는 commit 항목은 중복 출력하지 않는다.
+이때 PR에 흡수된 commit의 고유 경로 신호는 PR 항목에 한 번씩 유지하며, PR commit 목록은
+100개 단위로 끝까지 조회한다. 안전 상한까지 모두 채워 끝을 확인하지 못하면 성공으로 표시하지
+않고 degraded 상태와 오류를 남긴다.
 비정형 또는 invalid-v1 본문에서 필드를 추측하거나 복구하지 않는다. PR의 `Related issue`,
 closing/reference 문법, 전체 GitHub Issue URL로 명시된 연결만 추적한다.
 사용한 근거 종류, 원문 body, PR/Issue/commit URL과 covered SHA는 sealed snapshot의
@@ -133,6 +136,10 @@ closing/reference 문법, 전체 GitHub Issue URL로 명시된 연결만 추적�
 Slack token·webhook·credential URL 패턴과
 `REDMINE_API_KEY`·`GITHUB_TOKEN`·`NOTION_API_KEY`·Slack credential 환경변수 할당이 body에서
 탐지되면 원문을 출력하지 않고 `COMMIT_BODY_CREDENTIAL_DETECTED`로 전체 수집을 중단한다.
+v1 contract로 인식된 body의 credential 검사는 `includeCommitBody` 설정과 관계없이 적용한다.
+invalid-v1은 지원 credential이 탐지되면 중단하고, 그 밖의 경우에도 fields·lists를 provenance에
+남기지 않아 검사하지 않은 본문 필드가 snapshot으로 들어가지 않는다. 비정형 Markdown/HTML
+body는 기존처럼 상세 렌더링과 provenance에서 제외하고 subject만 사용한다.
 JSON/YAML 인용 키와 Markdown 강조·inline-code로 감싼 키도 같은 할당으로 취급한다.
 `X-Redmine-API-Key` 헤더를 `_` 또는 `__`로 감싼 Markdown 강조도 동일하게 차단한다.
 세미콜론 유무와 관계없이 숫자·16진수·일반 HTML entity로 credential 키를 분할한 표현과
