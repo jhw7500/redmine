@@ -146,6 +146,7 @@ invalid-v1은 지원 credential이 탐지되면 중단하고, 그 밖의 경우�
 body는 기존처럼 상세 렌더링과 provenance에서 제외하고 subject만 사용한다.
 JSON/YAML 인용 키와 Markdown 강조·inline-code로 감싼 키도 같은 할당으로 취급한다.
 Markdown link/reference와 HTML tag/comment로 credential 키를 분할한 표현도 정규화해 차단한다.
+Markdown 인라인 링크 목적지는 괄호 중첩 32단계까지 완전히 소비하며, 이를 초과하면 안전하게 수집을 중단한다.
 `X-Redmine-API-Key` 헤더를 `_` 또는 `__`로 감싼 Markdown 강조도 동일하게 차단한다.
 세미콜론 유무와 관계없이 숫자·16진수·일반 HTML entity로 credential 키를 분할한 표현과
 숫자 entity는 선행 0을 포함한 전체 숫자열을 소비한 뒤 코드포인트를 검증한다.
