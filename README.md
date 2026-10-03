@@ -154,6 +154,8 @@ JSON Unicode escape로 표현한 키와 `Authorization=Bearer ...` 할당도 같
 제로폭 문자·양방향 제어문자 등 Unicode default-ignorable 문자를 키 사이에 삽입한 표현도
 검사용 문자열에서 제거한 뒤 차단한다.
 backslash-escaped JSON과 Authorization 값 전체를 감싼 Markdown 강조도 차단한다.
+credential 접두부나 URL scheme 내부를 `_` 또는 `__` 강조로 분할한 표현도 delimiter를
+반복 정규화해 commit subject·구조화 body·PR·Issue 원문에서 동일하게 차단한다.
 shell append assignment(`+=`), serialized JSON whitespace escape, 다중 JSON 직렬화도 같은
 credential로 취급한다. JSON에서 escape된 URL 구분자(`\/`)도 복원해 검사하며, 직렬화 정규화가
 제한된 반복 안에 끝나지 않아도 안전하게 수집을 중단한다.
