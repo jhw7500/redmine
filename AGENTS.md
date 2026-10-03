@@ -49,7 +49,7 @@ node lib/notion-issue-publisher.js --page <notionPageId> --dry-run
 
 ## PR / 리뷰 워크플로
 
-- PR 생성 전 **pre-pr-tribunal** 게이트가 훅으로 강제된다. 루트의 `README.md`·`repo-config.json`은 `unknown-path` risk 100(iterative)으로 실측됐고 루트의 다른 `.md`도 같은 규칙을 탄다고 보이므로, 심사 단위를 작게 나눈다. 실제 값은 커밋 후 `policy-preview --base main --runtime claude|codex`로 확인한다(작업본이 dirty하면 `WORKTREE_DIRTY`).
+- PR 생성 전 **pre-pr-tribunal** 게이트가 훅으로 강제된다. 루트의 `README.md`·`repo-config.json`·`AGENTS.md`·`CLAUDE.md`는 `unknown-path` risk 100(iterative)으로 실측됐으므로, 심사 단위를 작게 나눈다. 실제 값은 커밋 후 `policy-preview --base main --runtime claude|codex`로 확인한다(작업본이 dirty하면 `WORKTREE_DIRTY`).
 - `gh pr create`는 게이트가 허용하는 형식만 통과한다 — 단일 세그먼트, 절대경로 실행파일, 리다이렉션·파이프·명령치환·`--repo`·`--head` 금지:
   ```bash
   PATH=/usr/bin:/bin /usr/bin/gh pr create --base main --title "<title>" --body-file <file>
