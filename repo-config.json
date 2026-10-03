@@ -224,7 +224,8 @@
     },
     "wlan-driver": {
       "path": "/home/jhw/ai/opencode/projects/wlan-driver-v2",
-      "category": "wlanDriver"
+      "category": "wlanDriver",
+      "githubRepo": "wlan-driver-v2"
     },
     "wpa-supplicant": {
       "path": "/home/jhw/ai/opencode/projects/wpa-supplicant",

@@ -49,7 +49,7 @@ Optional env vars
 - `AI_MAX_BUDGET_USD` (선택 — 설정 시 Claude CLI `--max-budget-usd`로 전달, 양수)
 - `AI_EN_PATH` (default: /home/jhw/ai/codex/redmine-auto/templates/ai-en.md)
 - `AI_KO_PATH` (default: /home/jhw/ai/codex/redmine-auto/templates/ai-ko.md)
-- `GITHUB_TOKEN` (optional: enables PR title lookup)
+- `GITHUB_TOKEN` (optional: 보고 기간의 merged PR·명시적으로 연결된 Issue 변경 증거 수집 활성화)
 - `GITHUB_OWNER` (default: jhw7500)
 
 Template
@@ -64,8 +64,12 @@ Notes
 - `WIKI_URL` can be the normal wiki page URL or the `/edit?section=...` URL.
 - If `WIKI_URL` is not set, the script targets the next Wednesday based on local time.
 - 자동 수집 범위는 매주 수요일 06:00 KST를 경계로 나눈다(지난 수요일 06:00부터 이번 수요일 05:59:59까지).
+  GitHub merged 시각 비교도 실행 호스트의 timezone과 관계없이 같은 KST 경계를 사용한다.
 - Workflow 요약은 핵심 항목만 출력하며, 한글에서도 'workflow'를 그대로 사용합니다.
-- `GITHUB_TOKEN`이 있으면 PR 제목/본문 요약을 자동으로 채웁니다.
+- `GITHUB_TOKEN`이 있으면 merged PR과 명시적으로 연결된 Issue를 조회해
+  `Change Evidence Contract v1`의 목적·변경·검증 근거를 commit보다 우선 사용합니다.
+  `AUTHOR_MATCH`가 설정됐으면 author 필터를 통과한 로컬 commit과 SHA가 연결된 PR만 포함합니다.
+  API 실패는 snapshot 전체 실패가 아니라 명시적 degraded mode와 commit fallback으로 기록합니다.
 
 Run
 - Collect once: `MODE=collect MEETING_DATE=2026-07-15 ./run-report-env.sh`
@@ -118,16 +122,40 @@ workflow/CI 분류도 subject만 사용하므로 body의 검증 도구명이 원
 Markdown/HTML 구조를 직접 해석하지 않고 상세 근거 전체를 제외해 subject만 사용한다.
 Unicode 식별자 내부의 underscore는 markup으로 취급하지 않는다. 반면 delimiter 후보 앞의
 backslash 개수는 해석하지 않고 보수적으로 body 상세를 제외한다.
-그 외 평문 body는 지원되는 API key·Authorization·
+단, 정확한 `Change Evidence Contract v1` commit은 저장소별 `includeCommitBody` 설정과 관계없이
+검증한 뒤 `Why`·`Changes`·`Validation`을 각각 목적·변경·검증 근거로 사용한다. 같은 변경의
+merged PR이 확인되면 PR body, 명시적으로 연결된 Issue body, structured commit, commit subject
+순으로 결합하고 PR의 merge/commit SHA와 겹치는 commit 항목은 중복 출력하지 않는다.
+이때 PR에 흡수된 commit의 고유 경로 신호는 PR 항목에 한 번씩 유지하며, PR commit 목록은
+100개 단위로 끝까지 조회한다. 안전 상한까지 모두 채워 끝을 확인하지 못하면 성공으로 표시하지
+않고 degraded 상태와 오류를 남긴다.
+비정형 또는 invalid-v1 본문에서 필드를 추측하거나 복구하지 않는다. PR의 `Related issue`,
+closing/reference 문법, 전체 GitHub Issue URL로 명시된 연결만 추적한다.
+사용한 근거 종류, 검증된 v1 원문 body, PR/Issue/commit URL과 covered SHA는 sealed snapshot의
+`sources.git.changeEvidence`에 보존한다. invalid-v1과 비정형 PR/Issue body는 분류와 finding만
+남기고 원문과 파싱 필드를 보존하지 않는다. GitHub API 실패는 `status: degraded`와 warning을
+남기되 Git 수집 자체를 partial로 바꾸지 않고 commit 근거로 계속한다.
+커밋 subject와 그 외 평문 body는 지원되는 API key·Authorization·
 Slack token·webhook·credential URL 패턴과
-`REDMINE_API_KEY`·`GITHUB_TOKEN`·`NOTION_API_KEY`·Slack credential 환경변수 할당이 body에서
-탐지되면 원문을 출력하지 않고 `COMMIT_BODY_CREDENTIAL_DETECTED`로 전체 수집을 중단한다.
+`REDMINE_API_KEY`·`GITHUB_TOKEN`·`NOTION_API_KEY`·Slack credential 환경변수 할당이 탐지되면
+원문을 출력하지 않고 `COMMIT_BODY_CREDENTIAL_DETECTED`로 전체 수집을 중단한다.
+subject 검사는 `includeCommitBody` 설정이나 PR 포함 여부와 관계없이 GitHub 조회와 artifact 생성 전에 적용한다.
+v1 contract로 인식된 body의 credential 검사는 `includeCommitBody` 설정과 관계없이 적용한다.
+invalid-v1은 지원 credential이 탐지되면 중단하고, 그 밖의 경우에도 fields·lists를 provenance에
+남기지 않아 검사하지 않은 본문 필드가 snapshot으로 들어가지 않는다. 비정형 Markdown/HTML
+body는 기존처럼 상세 렌더링과 provenance에서 제외하고 subject만 사용한다.
 JSON/YAML 인용 키와 Markdown 강조·inline-code로 감싼 키도 같은 할당으로 취급한다.
+Markdown link/reference와 HTML tag/comment로 credential 키를 분할한 표현도 정규화해 차단한다.
+Markdown 인라인 링크 목적지는 괄호 중첩 32단계까지 완전히 소비하며, 이를 초과하면 안전하게 수집을 중단한다.
 `X-Redmine-API-Key` 헤더를 `_` 또는 `__`로 감싼 Markdown 강조도 동일하게 차단한다.
 세미콜론 유무와 관계없이 숫자·16진수·일반 HTML entity로 credential 키를 분할한 표현과
 숫자 entity는 선행 0을 포함한 전체 숫자열을 소비한 뒤 코드포인트를 검증한다.
 JSON Unicode escape로 표현한 키와 `Authorization=Bearer ...` 할당도 같은 credential로 취급한다.
+제로폭 문자·양방향 제어문자 등 Unicode default-ignorable 문자를 키 사이에 삽입한 표현도
+검사용 문자열에서 제거한 뒤 차단한다.
 backslash-escaped JSON과 Authorization 값 전체를 감싼 Markdown 강조도 차단한다.
+credential 접두부나 URL scheme 내부를 `_` 또는 `__` 강조로 분할한 표현도 delimiter를
+반복 정규화해 commit subject·구조화 body·PR·Issue 원문에서 동일하게 차단한다.
 shell append assignment(`+=`), serialized JSON whitespace escape, 다중 JSON 직렬화도 같은
 credential로 취급한다. JSON에서 escape된 URL 구분자(`\/`)도 복원해 검사하며, 직렬화 정규화가
 제한된 반복 안에 끝나지 않아도 안전하게 수집을 중단한다.
@@ -137,7 +165,9 @@ Slack의 standalone·rotation token prefix(`xoxb-`, `xoxp-`, `xapp-`, `xwfp-`,
 `xoxe-`, `xoxe.xoxb-`, `xoxe.xoxp-`, `xoxc-`, `xoxd-`)도 같은 방식으로 차단한다.
 Markdown backslash escape로 prefix 구두점을 감춘 표현도 렌더링 전 원형으로 복원해 차단한다.
 이 오류는 `ALLOW_PARTIAL_SNAPSHOT=1`로 우회되지 않으며 snapshot·candidate를 만들지 않는다.
-commit body 수집이 활성화된 구성에서는 현재 credential-scan 계약이 없는 기존 sealed snapshot을
+PR이 연결한 Issue는 해당 PR과 동일한 GitHub 저장소만 조회한다. 다른 owner/repository를 가리키는
+참조는 인증 요청을 보내지 않고 change evidence를 degraded 상태로 기록한다.
+Git 수집이 활성화된 구성에서는 PR·Issue·commit 원문에 적용되는 현재 credential-scan 계약이 없는 기존 sealed snapshot을
 재사용하지 않는다. `collect`는 이를 복제 보관하지 않고 안전한 재수집 결과로 교체하며,
 `generate`·`update` 직접 로드는 `SNAPSHOT_SECURITY_CONTRACT_MISSING`으로 중단한다.
 이 계약은 commit body 수집 대상 repo 키 목록까지 봉인하므로 기능 활성화나 대상 변경 뒤에는
