@@ -250,7 +250,7 @@ async function runCollect(config, meetingDate) {
 // 한 provider가 리미트에 걸려도 주간 보고가 멈추지 않게 하려는 것이다.
 const WEEKLY_PREPARE_PROVIDER_MODELS = { codex: "gpt-5.6-sol", claude: "sonnet" };
 
-function assertWeeklyProfile(config, mode) {
+function assertWeeklyProfile(config, mode, { generationMethod = "source_selection" } = {}) {
   if (!["weekly-prepare", "weekly-publish"].includes(mode)) return;
   const env = config && config.env;
   if (!env) throw new Error("[weekly] configuration is required");
@@ -270,11 +270,14 @@ function assertWeeklyProfile(config, mode) {
       const allowed = Object.keys(WEEKLY_PREPARE_PROVIDER_MODELS).join(" or ");
       throw new Error(`[weekly] ${mode} requires aiProvider=${allowed}`);
     }
+    if (!["source_selection", "freeform"].includes(generationMethod)) {
+      throw new Error(`[weekly] ${mode} cannot expect generation method ${generationMethod}`);
+    }
     expected = {
       aiSummarize: true,
       aiModel,
       aiEffort: "low",
-      aiGenerationMethod: "source_selection",
+      aiGenerationMethod: generationMethod,
       aiGenerationScope: "whole",
       sourceSelectionFallback: true,
       validationMode: "block",
@@ -422,7 +425,9 @@ function prepareFailureArtifacts(outputDir, collectResult, generationResult, gen
 }
 
 async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
-  assertWeeklyProfile(config, "weekly-prepare");
+  // Weekly variants are source_selection; only the pair summary asks for freeform.
+  const generationMethod = dependencies.generationMethod ?? "source_selection";
+  assertWeeklyProfile(config, "weekly-prepare", { generationMethod });
   const collect = dependencies.runCollect || runCollect;
   const generateReport = dependencies.runGenerate || runGenerate;
   const validateEvidence = dependencies.assertV2PublishEvidence || assertV2PublishEvidence;
@@ -503,7 +508,7 @@ async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
         || snapshot.contentHash !== collectResult.snapshot.contentHash
         || generationState.schemaVersion !== 2
         || generationState.status !== "complete"
-        || generationState.generationMethod !== "source_selection"
+        || (generationState.generationMethod ?? "freeform") !== generationMethod
         || generationState.reportDepth !== config.env.reportDepth
       ) {
         throw new Error("weekly READY evidence metadata mismatch");
@@ -1875,8 +1880,9 @@ async function main() {
     }
     case "weekly-pair-publish": {
       const depth = config.env.weeklyPublishDepth ?? "2";
-      if (!["2", "3"].includes(depth)) throw new Error("WEEKLY_PUBLISH_DEPTH must be 2 or 3");
-      return require("./lib/weekly-report-pair").publishWeeklyPair(config, meetingDate, {depth:Number(depth)});
+      if (!["2", "3", "auto"].includes(depth)) throw new Error("WEEKLY_PUBLISH_DEPTH must be 2 or 3, or auto");
+      return require("./lib/weekly-report-pair").publishWeeklyPair(config, meetingDate,
+        {depth:depth === "auto" ? depth : Number(depth)});
     }
     case "weekly-pair-send": {
       const result = await require("./lib/weekly-report-pair").sendWeeklyPair(config, meetingDate);
