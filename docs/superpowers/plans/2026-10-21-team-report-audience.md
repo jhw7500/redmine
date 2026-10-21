@@ -134,3 +134,11 @@
 - 제작·설치·전달의 양방향 전체 계약 차단과 단계 근거 없는 버전, 중립 버전, 분할된 상태어, 인용 예제, 무관한 강조·기존 HTML 밑줄을 회귀로 확인. 수정 전 릴리즈 tests 49 / pass 45 / fail 4, 수정 후 집중 tests 109 / pass 109 / fail 0 / skipped 0 / cancelled 0.
 - 좁은 독립 코드 점검에서 중요 지적 0건 확인. 최종 전체 검증 1회: `node --test lib/__tests__/*.test.js`, tests 1201 / pass 1201 / fail 0 / skipped 0 / cancelled 0, 16.32초. 수정 JavaScript 2개 구문 검사와 diff 공백 검사 통과. 실행 원문·입력 hash는 `/tmp/redmine-stage-markup-fix-bvg_3imk`에 private 파일로 보존.
 - 기존 정식 2차 FAIL verdict와 이미 게시한 수치 검토본 hash 불변 확인. 기존 AI/READY/게시 증거, Redmine version 15 및 Slack 발송 보류 유지. 다음 cron부터 단계 검증에 적용되며 일정·래퍼·환경 파일은 변경하지 않음.
+
+## PR #134 후속 수정: 중첩 링크 목적지
+
+- 사용자 ‘계속 이어서진행해’에 따라 열린 PR의 A-R3-001 후속 수정. 최초 PR은 3223869의 3차 FAIL을 명시한 예외 승인으로 생성했으며, 기존 verdict·심사 응답은 유지하고 추가 사전심사를 시작하지 않음.
+- 첫 닫는 괄호에서 끝나던 링크 정규식 대신 수집기에 이미 있는 bounded Markdown 목적지 분석기를 공개·재사용. 기존 중첩 괄호·이스케이프·제목·깊이 제한 처리는 변경하지 않음. 제한 초과·모호한 구문은 unknown으로 차단하고, 보조 투영이 원문의 완료 근거를 새로 만들지 못하는 경계를 유지.
+- 제작·설치·전달의 중첩 링크 우회를 수정 전 전체 계약 회귀로 재현. 양방향 변조와 근거 없는 완료, 중립 버전, 분할 상태어, 모호한·깊이 초과 구문, 정상 인접 링크를 확인. 수정 후 집중 검증: `node --test lib/__tests__/team-evidence.test.js lib/__tests__/open-status-context.test.js lib/__tests__/team-report.test.js lib/__tests__/collector-signals.test.js`, tests 263 / pass 263 / fail 0 / skipped 0 / cancelled 0.
+- 최종 전체 검증 1회: `node --test lib/__tests__/*.test.js`, tests 1207 / pass 1207 / fail 0 / skipped 0 / cancelled 0, 17.343초. 변경 JavaScript 3개 구문 검사와 diff 공백 검사 통과. 실행 원문·입력 hash는 `/tmp/redmine-pr134-link-fix-eff66j7o`에 private 파일로 보존.
+- 기존 3차 FAIL verdict와 Redmine version 15 게시본 hash 불변 확인. 서버 재게시·Slack 발송·live AI 호출·추가 Tribunal 없음. 이 수정은 다음 cron의 생성·검증에 적용되며 일정·래퍼·환경 파일은 변경하지 않음.
