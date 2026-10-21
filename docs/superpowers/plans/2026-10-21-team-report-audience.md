@@ -115,3 +115,14 @@
 - 최종 전체 검증 1회: `node --test lib/__tests__/*.test.js`, tests 1191 / pass 1191 / fail 0 / skipped 0 / cancelled 0. JavaScript 구문 검사와 diff 공백 검사 통과. 실행 원문·결과·입력 hash는 `/tmp/redmine-common-negation-evidence-vqgdptr4`에 private 파일로 보존.
 - 한계: `장비 안 케이블 설치 완료`의 장소 명사 `안`처럼 부정과 구별하기 어려운 문맥은 보수적으로 완료 근거에서 제외. 중립 버전 표기는 허용하며 의미가 명확한 원문 근거가 필요하다는 운용 지침과 회귀를 추가.
 - 기존 Tribunal verdict와 이미 게시한 수치 검토본의 hash 불변 확인. 기존 생성·게시 증거, Redmine version 15 및 Slack 발송 보류 유지. 생성·검증 경로 변경은 다음 cron 실행부터 적용되며 일정·래퍼·환경 파일은 변경하지 않음.
+
+## 후속 심사 수정: 단계 앞뒤의 상태 대조
+
+- 새 1차 심사 A-R1-001은 `미완료 패키지 제작 확인`처럼 앞의 비완료 상태가 뒤의 확인으로 승격되는 실제 계약 누락. 사용자 ‘잘좀해봐 별거아니면 그냥 넘어가도됨’에 따라 이 오류를 수정하고 경미한 스타일·명명 문제는 추가 수정 대상으로 삼지 않음.
+- 기존 상태 사전을 접두·접미 판정이 공유하도록 모으고, 문장 분할 전 단어 순회에서 단계 앞 상태를 결속. 서로 같은 상태는 보존하고 다른 상태·알 수 없는 상태는 단계 근거에서 제외. 별도 표기 예외나 의존성·환경·권한·엔드포인트를 추가하지 않음.
+- 제작·설치·전달 각각에서 기존 9개 비완료 상태와 구분자·강조·붙여쓰기의 양방향 변조 실패, 중립 버전 유지, 앞뒤 일치·충돌을 회귀로 추가. 수정 전 릴리즈 회귀 tests 43 / pass 39 / fail 4, 수정 후 집중 tests 103 / pass 103 / fail 0 / skipped 0 / cancelled 0.
+- 직전 B의 6개 미확인은 컨트롤러가 ‘pipeline 실행 금지’를 넓게 전달한 영향. 외부 호출 없는 순수 함수·fixture·fake provider/HTTP 기반 통합 테스트는 허용하고, 실제 provider·환경 래퍼·Redmine·Slack 호출만 금지하는 경계로 바로잡음. 기존 심사 응답과 판정은 수정하지 않음.
+- 좁은 코드 점검에서 발견한 일반 명사 오탐도 수정. 상태어 전체와 닫힌 연결어·대상어 문법으로 제한하고 `계획서·취소선·중단점·실패율·함께`의 정상 완료 근거 보존을 전체 계약 회귀로 확인. 수정 전 tests 44 / pass 43 / fail 1, 수정 후 집중 tests 104 / pass 104 / fail 0 / skipped 0 / cancelled 0.
+- 앞서 지적된 일반 명사 오탐과 기존 상태·부정 보호의 좁은 재확인에서 잔여 문제 없음 확인. 스타일·명명이나 추측성 언어 사례로 범위를 넓히지 않음.
+- 최종 전체 검증 1회: `node --test lib/__tests__/*.test.js`, tests 1196 / pass 1196 / fail 0 / skipped 0 / cancelled 0, 16.977초. 외부 호출 없는 fixture·fake 기반 통합 테스트도 포함. 변경 JavaScript 2개 구문 검사와 diff 공백 검사 통과. 실행 원문과 입력 hash는 `/tmp/redmine-stage-state-fix-2em1tubw`에 private 파일로 보존.
+- 기존 Tribunal verdict와 게시된 수치 검토본 hash 불변 확인. 기존 AI/READY/게시 증거, Redmine version 15 및 Slack 발송 보류 유지. 다음 cron부터 상태 검증에 적용되며 일정·래퍼·환경 파일은 변경하지 않음.
