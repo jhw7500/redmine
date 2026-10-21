@@ -126,3 +126,11 @@
 - 앞서 지적된 일반 명사 오탐과 기존 상태·부정 보호의 좁은 재확인에서 잔여 문제 없음 확인. 스타일·명명이나 추측성 언어 사례로 범위를 넓히지 않음.
 - 최종 전체 검증 1회: `node --test lib/__tests__/*.test.js`, tests 1196 / pass 1196 / fail 0 / skipped 0 / cancelled 0, 16.977초. 외부 호출 없는 fixture·fake 기반 통합 테스트도 포함. 변경 JavaScript 2개 구문 검사와 diff 공백 검사 통과. 실행 원문과 입력 hash는 `/tmp/redmine-stage-state-fix-2em1tubw`에 private 파일로 보존.
 - 기존 Tribunal verdict와 게시된 수치 검토본 hash 불변 확인. 기존 AI/READY/게시 증거, Redmine version 15 및 Slack 발송 보류 유지. 다음 cron부터 상태 검증에 적용되며 일정·래퍼·환경 파일은 변경하지 않음.
+
+## 후속 심사 수정: 단계 내부의 서식 분할
+
+- 2차 심사 A-R2-001은 `설**치**`, `전**달**`, `제**작**`이나 default-ignorable 문자로 동작 토큰을 나누면 단계 검증 record가 사라지는 경로. 사용자 ‘수정후 다시진행’에 따라 수정·검증·PR 준비를 수행.
+- 원문 단계 parser의 근거 취득 규칙은 유지. Markdown·링크·default-ignorable·문자 엔티티·NFKC 보조 투영에서 새로 보이는 단계나 상태만 unknown으로 추가하므로, 투영으로 새로운 완료 근거가 생기지 않음. 원문 구절·위치·scalar 계약 유지.
+- 제작·설치·전달의 양방향 전체 계약 차단과 단계 근거 없는 버전, 중립 버전, 분할된 상태어, 인용 예제, 무관한 강조·기존 HTML 밑줄을 회귀로 확인. 수정 전 릴리즈 tests 49 / pass 45 / fail 4, 수정 후 집중 tests 109 / pass 109 / fail 0 / skipped 0 / cancelled 0.
+- 좁은 독립 코드 점검에서 중요 지적 0건 확인. 최종 전체 검증 1회: `node --test lib/__tests__/*.test.js`, tests 1201 / pass 1201 / fail 0 / skipped 0 / cancelled 0, 16.32초. 수정 JavaScript 2개 구문 검사와 diff 공백 검사 통과. 실행 원문·입력 hash는 `/tmp/redmine-stage-markup-fix-bvg_3imk`에 private 파일로 보존.
+- 기존 정식 2차 FAIL verdict와 이미 게시한 수치 검토본 hash 불변 확인. 기존 AI/READY/게시 증거, Redmine version 15 및 Slack 발송 보류 유지. 다음 cron부터 단계 검증에 적용되며 일정·래퍼·환경 파일은 변경하지 않음.
