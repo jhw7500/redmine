@@ -169,6 +169,7 @@ const NON_OVERRIDABLE_V2_CODES = new Set([
   "measurement_claim_structure",
   "measurement_claim_omitted",
   "duplicate_fact_claim",
+  "release_stage_mismatch",
   "invalid_test_ratio",
   "unsafe_test_count",
   "unmarked_protected_fact",
