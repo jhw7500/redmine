@@ -165,6 +165,10 @@ const NON_OVERRIDABLE_V2_CODES = new Set([
   "unknown_fact_id",
   "fact_value_mismatch",
   "fact_subject_mismatch",
+  "fact_evidence_mismatch",
+  "measurement_claim_structure",
+  "measurement_claim_omitted",
+  "duplicate_fact_claim",
   "invalid_test_ratio",
   "unsafe_test_count",
   "unmarked_protected_fact",
@@ -278,7 +282,7 @@ function assertWeeklyProfile(config, mode, { generationMethod = "source_selectio
       aiModel,
       aiEffort: "low",
       aiGenerationMethod: generationMethod,
-      aiGenerationScope: "whole",
+      aiGenerationScope: generationMethod === "freeform" && env.reportAudience === "team" ? "project" : "whole",
       sourceSelectionFallback: true,
       validationMode: "block",
       validationOverride: false,
@@ -815,6 +819,13 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
   const attemptId = crypto.randomUUID();
   const runPaths = buildRunPaths(config.env.outputDir, meetingDateText, attemptId);
   const startedAt = new Date().toISOString();
+  const summaryQualityProfile = config.env.reportAudience === "team" ? {
+    schemaVersion: 1,
+    audience: "team",
+    highlightEnabled: config.reportFilter?.leaderHighlight?.enabled !== false,
+    highlightMaxLines: config.reportFilter?.leaderHighlight?.maxLines || 0,
+    advisoryMaxBullets: config.depthProfiles?.[3]?.advisoryMaxBullets || 60,
+  } : null;
   const generationStateBase = {
     schemaVersion: 2,
     meetingDate: meetingDateText,
@@ -823,6 +834,7 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
     attemptId,
     runDir: runPaths.runDir,
     startedAt,
+    ...(summaryQualityProfile ? { summaryQualityProfile } : {}),
   };
   let runInitialized = false;
   let aiStarted = false;
@@ -838,7 +850,9 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
   try {
     const sourceCoverageMode = SOURCE_COVERAGE_MODE;
     const buildCoverage = dependencies.buildSourceCoverageCatalog || buildSourceCoverageCatalog;
-    const coverageCatalog = buildCoverage(snapshot, config.categories);
+    const coverageCatalog = buildCoverage(snapshot, config.categories, {
+      projectOnly: !selectionMode && config.env.reportAudience === "team",
+    });
     Object.assign(generationStateBase, {
       sourceCoverageMode,
       coverageCatalogHash: coverageCatalog.coverageCatalogHash,
@@ -851,7 +865,10 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       type: "meeting_date",
       raw: meetingDateText,
       subject: "meeting date",
-    }], { knownPaths: coverageCatalog.knownPaths });
+    }], { knownPaths: coverageCatalog.knownPaths,
+      teamReport: !selectionMode && config.env.reportAudience === "team",
+      termAliases: config.reportFilter?.teamReport?.termAliases || {},
+    });
     const meetingDateFact = catalog.facts.find((fact) => fact.type === "meeting_date");
     const factInputMode = "inline_refs";
     const annotateFacts = dependencies.annotateFactReferences || annotateFactReferences;
@@ -900,6 +917,7 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       buildAiPrompt
     );
     const promptInput = {
+      ...(summaryQualityProfile ? { summaryQualityProfile } : {}),
       ...(records ? {generationMethod:"source_selection", sourceRecordsHash:records.recordsHash} : {}),
       snapshotPath,
       snapshotHash: snapshot.contentHash,
@@ -940,6 +958,7 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       prompt:selectionPrompt, onRawAiOutput:captureRawAiOutput,
     }) : await generateContent(config, meetingDate, aiSource, {
       ...promptOptions,
+      factSourceContent: snapshot.rawContent,
       generationPlan,
       onRawAiOutput: captureRawAiOutput,
       onRawAiPartOutput: ({ id, index, rawOutput }) => {
@@ -1162,6 +1181,7 @@ function readRevalidationPromptInput(promptInputPath) {
 function resolveRevalidationCoverageOwnership(run, generationState) {
   const promptInput = readRevalidationPromptInput(run.paths.promptInputPath);
   const owners = [run.state, generationState, promptInput];
+  assertSummaryProfileOwnership(owners);
   const fieldsPresent = owners.flatMap((owner) => [
     Object.prototype.hasOwnProperty.call(owner, "sourceCoverageMode"),
     Object.prototype.hasOwnProperty.call(owner, "coverageCatalogHash"),
@@ -1413,6 +1433,7 @@ function mapRunEvidenceError(error) {
 }
 
 function assertV2CoveragePublishEvidence({ state, current, run, validation, promptInput }) {
+  assertSummaryProfileOwnership([state, current, run.state, promptInput]);
   const owners = [state, current, run.state, validation, promptInput];
   const coverageEnabled = owners.some(
     (owner) => Object.prototype.hasOwnProperty.call(owner, "sourceCoverageMode")
@@ -1436,6 +1457,13 @@ function assertV2CoveragePublishEvidence({ state, current, run, validation, prom
       "coverage_catalog_hash_mismatch",
       "coverage catalog hash ownership mismatch"
     );
+  }
+}
+
+function assertSummaryProfileOwnership(owners) {
+  const hashes = owners.map(owner => hashObject(owner.summaryQualityProfile ?? null));
+  if (!hashes.every(hash => hash === hashes[0])) {
+    throw evidenceError("attempt_ownership_mismatch", "summary quality profile ownership mismatch");
   }
 }
 

@@ -239,6 +239,24 @@ AI-enabled generate의 `prompt-input.json`에는 다음 실행 증거가 기록�
 
 `project`가 중간 파트에서 실패하면 병합 draft와 canonical 보고서는 생성되지 않는다. `draft.ai.part.NNN.annotated.md`와 `state.json`의 `partFailure`를 확인한다. 부분 출력은 `MODE=revalidate` 대상이 아니며, 원인 수정 또는 다른 명시적 설정으로 generate를 새로 실행한다.
 
+## 주간 pair의 팀 독자용 요약
+
+`repo-config.json`의 `reportFilter.teamReport.enabled=true`이면 pair의 회의용 summary만 팀 독자용으로 생성한다. 상세 depth2·depth3와 Slack 상세 근거는 기존 원문 선택 방식 유지.
+
+- 원본 sealed snapshot은 유지하고 summary의 필수 source coverage를 프로젝트 루트(PIM·Wireless Lan·ETC)로 설정. 숫자·상태와 다른 프로젝트로의 근거 이동 검증은 유지.
+- 원문을 자르지 않도록 기존 `project` scope를 사용. 존재하는 프로젝트마다 한 번 호출하며, 한 summary generation 안에서 실행한다. 실패한 summary를 자동 재생성하지 않음.
+- `teamReport.guidance`에 프로젝트 중심 내용, 명사형 종결, 한 줄 한 항목, 내용별 들여쓰기, 웹 GPT·MCP 터널링과 빌드 서버의 분리 기준을 설정.
+- 실제 릴리즈 버전과 측정·단축 시간, 용량·처리량·온도·전력 등 성과 수치는 보존. 커밋·중간 빌드 식별자만 제외하며, 값·단위·측정 대상·조건과 패키지 제작/장비 설치/고객 전달 단계를 함께 유지. 근거 없는 수치나 계산값은 추가하지 않음.
+- `leaderHighlight.guidance`는 상세 선택과 summary에 공통 적용. ETC도 같은 중요도 기준으로 선정하며 대표 성과 한 줄에만 밑줄 표시.
+- team summary 품질 검사에서 구현 경로·명시적인 식별자, 서술형 종결, 한 줄의 여러 문장, 강조 비활성/상한 위반을 차단. 원문 근거와 의미 보존은 최종 검토 대상.
+- `publish auto`는 유효한 summary를 선택하고, summary가 실패하면 기존 depth2 fallback을 유지. 수동 수정본을 검증된 summary로 가장해 게시하지 않음.
+- 설정 변경은 다음 cron 준비부터 적용. 기존 pair의 immutable 산출물을 재작성하지 않음. Redmine 게시와 Slack 전송에는 별도 승인 필요.
+- 생성 당시 audience·밑줄 사용 여부·상한은 `summaryQualityProfile`로 run·generation·prompt-input 증거에 결속. 게시 시 해당 기준으로 재검사하며, 이 필드가 없는 과거 summary는 기존 작성 기준 적용.
+
+새 팀 요약은 읽기 쉬운 원문 측정 구절을 `M` 근거로 묶는다. AI가 ID를 선택하면 코드가 대상·조건·변경 전후·단위가 고정된 구절을 독립 불릿으로 확장한다. `teamReport.termAliases`는 첫 수치 앞의 업무 용어만 바꾸며 숫자 이후의 값·단위·조건은 원문 그대로 유지한다. 실제 릴리즈 버전은 suffix까지 보존한 중립적인 버전 불릿으로 출력한다. 제작·장비 설치·고객 전달은 별도 원문 근거로 확인하고, 제작 버전과 설치 버전이 다르면 각각 표시한다.
+
+근거 구절 변조·다른 프로젝트로 이동·중복 선택·프로젝트 내 사용 가능한 수치 근거의 전부 생략은 차단하며 `VALIDATION_OVERRIDE`로 우회하지 않는다. 기존 Q/V 검증과 과거 catalog는 유지한다. 이 검사는 자유롭게 작성한 상위 설명의 의미나 적용 단계를 전부 증명하지 않으므로 최종 내용 검토가 필요하다. 코드식 API·시험 장비 명칭은 팀 독자가 이해할 업무 표현으로 작성하며, 알려진 명칭이 남으면 품질 검사에서 차단한다.
+
 ## 실패 코드별 대응
 
 | 코드/상태 | 의미 | 대응 |
