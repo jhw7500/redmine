@@ -96,3 +96,12 @@
 - 최종 전체 검증 1회: `node --test lib/__tests__/*.test.js`, tests 1178 / pass 1178 / fail 0 / skipped 0 / cancelled 0. 변경 JavaScript 7개 구문 및 diff 공백 검사 통과.
 - 검사는 명시된 제작·설치·고객 전달 표현의 단계·상태와 연결 관계를 대상으로 함. 자유 서술 전체의 의미를 증명하지 않으며, 복합 문맥은 중립적인 버전 표기 또는 수동 내용 검토가 필요.
 - 기존 AI 응답·snapshot·READY/게시 증거는 수정하지 않았고 유료 AI 호출·서버 쓰기·Slack 발송 없음. 생성·검증 보강은 다음 cron 준비부터 적용되며 cron 일정·래퍼·환경 파일은 변경하지 않음.
+
+## PR 심사 수정: review-fix round 2
+
+- A-R2-001: 단계 단어 앞의 접두 부정과 단어 경계를 확인해 ‘미제작·미설치·미납품 확인’을 완료 근거로 취득하지 않음. 장비 미적용·미배포·고객 미전달도 불명확한 단계로 차단.
+- 단계어 바로 앞의 단일 부정 토큰에만 강조·inline code·괄호·따옴표 처리를 적용. 임의 마크업 전체를 제거하지 않으므로 양성 예제 전체의 인용·강조가 새로운 완료 근거가 되지 않음. ‘미설치 현황’처럼 후행 메타 표현으로 부정 단계가 검사에서 사라지는 경우도 차단.
+- 제작·설치·전달 각각의 긍정 원문→부정 출력과 부정 원문→긍정 출력은 전체 report contract에서 우회 불가능한 실패. 부정 원문에 대한 중립 버전 표기와 정상 ‘미디어 패키지 제작 확인’은 유지. 변경은 원문 증거와 위치를 재작성하지 않음.
+- 실패 회귀 확인 후 수정. `node --test lib/__tests__/team-evidence.test.js`: tests 30 / pass 30 / fail 0 / skipped 0 / cancelled 0. `node --test lib/__tests__/team-evidence.test.js lib/__tests__/open-status-context.test.js lib/__tests__/team-report.test.js`: tests 90 / pass 90 / fail 0 / skipped 0 / cancelled 0. 좁은 독립 코드 검토 승인.
+- 최종 전체 검증 1회: `node --test lib/__tests__/*.test.js`, tests 1182 / pass 1182 / fail 0 / skipped 0 / cancelled 0. 심사 수정 JavaScript 7개 구문 및 diff 공백 검사 통과.
+- 기존 AI 응답·snapshot·READY/게시 증거 유지. 서버 쓰기·Slack 발송·유료 AI 호출·빌드 실행 없음. 다음 cron의 검증에 적용되며 일정·래퍼·환경 파일은 변경하지 않음.
