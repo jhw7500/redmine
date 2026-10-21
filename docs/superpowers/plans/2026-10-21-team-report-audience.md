@@ -105,3 +105,13 @@
 - 실패 회귀 확인 후 수정. `node --test lib/__tests__/team-evidence.test.js`: tests 30 / pass 30 / fail 0 / skipped 0 / cancelled 0. `node --test lib/__tests__/team-evidence.test.js lib/__tests__/open-status-context.test.js lib/__tests__/team-report.test.js`: tests 90 / pass 90 / fail 0 / skipped 0 / cancelled 0. 좁은 독립 코드 검토 승인.
 - 최종 전체 검증 1회: `node --test lib/__tests__/*.test.js`, tests 1182 / pass 1182 / fail 0 / skipped 0 / cancelled 0. 심사 수정 JavaScript 7개 구문 및 diff 공백 검사 통과.
 - 기존 AI 응답·snapshot·READY/게시 증거 유지. 서버 쓰기·Slack 발송·유료 AI 호출·빌드 실행 없음. 다음 cron의 검증에 적용되며 일정·래퍼·환경 파일은 변경하지 않음.
+
+## 심사 실패 후 로컬 수정: 부정 구분자 공통 처리
+
+- 사용자 ‘진행해’에 따라 수정·회귀·전체 검증까지만 수행. 기존 3차 Tribunal FAIL 기록은 보존하며 새 정식 심사·커밋·push·PR 생성은 수행하지 않음.
+- A-R3-001: `미-설치 확인`의 부정이 문장 분할에서 사라지는 경로를 수정. 표기별 마크업 제거 예외를 공통 단어 순회로 대체하고, 부정 토큰과 동작 사이의 공백·구두점·기호·서식 문자 및 대상어를 함께 읽음. 원문 구절과 위치는 재작성하지 않음.
+- 추가 코드 검토에서 발견한 `장비미적용·보드미배포·고객미전달`도 기존 단계 문법의 대상어를 재사용해 같은 순회에서 차단. 공백 없는 긍정 문구와 `미디어·이미·도우미·국비`는 완료 근거 유지. 해당 지적에 대한 좁은 재확인에서 잔여 문제 없음 확인; 정식 Tribunal 재심사를 대체하지 않음.
+- 회귀는 제작·설치·전달의 긍정 원문→부정 출력, 부정 원문→긍정 출력 차단과 중립 버전 유지, 구분자·대상어·HTML 엔티티·Markdown 표현, 서로 다른 버전의 원문 절 분리까지 전체 보고서 계약에서 확인. 추가 qualifier 회귀의 수정 전 결과는 tests 39 / pass 38 / fail 1, 수정 후 집중 검증은 tests 99 / pass 99 / fail 0 / skipped 0 / cancelled 0.
+- 최종 전체 검증 1회: `node --test lib/__tests__/*.test.js`, tests 1191 / pass 1191 / fail 0 / skipped 0 / cancelled 0. JavaScript 구문 검사와 diff 공백 검사 통과. 실행 원문·결과·입력 hash는 `/tmp/redmine-common-negation-evidence-vqgdptr4`에 private 파일로 보존.
+- 한계: `장비 안 케이블 설치 완료`의 장소 명사 `안`처럼 부정과 구별하기 어려운 문맥은 보수적으로 완료 근거에서 제외. 중립 버전 표기는 허용하며 의미가 명확한 원문 근거가 필요하다는 운용 지침과 회귀를 추가.
+- 기존 Tribunal verdict와 이미 게시한 수치 검토본의 hash 불변 확인. 기존 생성·게시 증거, Redmine version 15 및 Slack 발송 보류 유지. 생성·검증 경로 변경은 다음 cron 실행부터 적용되며 일정·래퍼·환경 파일은 변경하지 않음.
