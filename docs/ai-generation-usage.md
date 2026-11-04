@@ -276,12 +276,12 @@ AI-enabled generate의 `prompt-input.json`에는 다음 실행 증거가 기록�
 2. 통과한 변형이 없으면 거부된 보고서를 summary → depth2 → depth3 순으로 첫 사용 가능한 것을 문제 줄 포함 그대로 게시. 섹션 헤더가 정확히 1개여야 하고, manifest 경로가 pair 폴더 안으로 해석되는 것만 후보가 된다.
 3. 후보가 없으면 `NO_PUBLISHABLE_REPORT`로 실패한다. exit가 0이 아니므로 기존 `[ALERT] … 보고 실패` 알림이 나간다.
 4. depth를 2 또는 3으로 명시하면 실패한 변형은 여전히 게시 거부.
-5. 거부 보고서 게시는 영수증에 `status: "rejected_published"`를 남긴다. 같은 날짜 재게시는 `Already published`로 거부되고, `publication.started.json`만 있고 `completed`가 없는 중단 상태는 복구 승인이 필요하다.
+5. 거부 보고서 게시는 영수증에 `status: "rejected_published"`를 남긴다. 같은 날짜 재실행은 영수증이 지금 고른 거부 보고서(변형·depth·보고서 해시·`rejected_published`)와 정확히 같으면 쓰기 없이 skip(exit 0)하고, 다르면 `Already published`로 거부된다. `publication.started.json`만 있고 `completed`가 없는 중단 상태는 복구 승인이 필요하다.
 
 **검토 블록** (`lib/review-block.js` `buildReviewBlock`, `lib/publisher.js` `update`의 `options.reviewBlock`)
 
 - `**검토 필요(자동)**`로 시작하고 `#` 헤더가 없다. 위치는 발표노트 블록 뒤, footer 앞.
-- 내용: 게시한 변형과 통과/실패 상태, 실패 변형별 이슈 코드와 개수 및 error 줄 발췌(변형당 최대 20줄, 줄당 최대 200자), summary 상태·사유와 gate 차단 코드, 수집 제외 근거(repo·ref·kind만), 생략된 모바일 브리핑.
+- 내용: 게시한 변형과 통과/실패 상태, 실패 변형별 이슈 코드와 개수 및 error 줄 발췌(변형당 최대 20줄, 줄당 최대 200자), summary 상태·사유와 gate 차단 코드 및 검증 단계에서 거부된 summary의 error 줄 발췌(같은 상한), 수집 제외 근거(repo·ref·kind만), 생략된 모바일 브리핑.
 - 이슈의 `message`/`evidence`와 제외된 근거의 원문은 넣지 않는다.
 - 내용 검증은 블록 없는 섹션에, 헤더 수 검사는 블록 포함 최종 섹션에 적용한다.
 - 블록을 포함한 게시 섹션은 보고서 옆 `*.published.md`(`buildPublishedPath`)에도 저장된다. 거부 보고서 게시도 같다(`lib/weekly-pipeline.js`).
@@ -301,7 +301,7 @@ AI-enabled generate의 `prompt-input.json`에는 다음 실행 증거가 기록�
 1. 위키 해당 섹션 하단의 `**검토 필요(자동)**` 블록을 읽는다.
 2. 보고서 옆 `*.published.md`로 게시된 전문을 확인한다.
 3. `pairs/<date>/review-needed.json`의 변형·사유 코드, `out/ALERT.log`, `out/cron.log`로 원인을 추적한다.
-4. 같은 날짜 재게시는 `Already published`로 막혀 있으므로 교체에는 복구 승인이 필요하다.
+4. 같은 보고서의 재실행은 skip되고, 다른 보고서로의 교체는 `Already published`로 막혀 있으므로 복구 승인이 필요하다.
 5. `review-needed.notified`가 있으면 알림이 재전송되지 않는다. 다시 받으려면 이 파일을 지운다.
 
 ## 실패 코드별 대응
