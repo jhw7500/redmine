@@ -14,14 +14,8 @@ const {
   validateNonFactRules,
   validateReport,
 } = require("./lib/fact-validator");
-const {
-  COMPLETED_TAG,
-  closePresentedNotes,
-  publishNotes,
-  queryCompletedNotes,
-} = require("./lib/notion-issue-publisher");
 const { normalizeOpenStatusAsOfClauses } = require("./lib/open-status-normalizer");
-const { describeEmptySelection, selectPresentationNotes } = require("./lib/presentation-note-classifier");
+const { createPresentationNoteFlow } = require("./lib/presentation-note-flow");
 const {
   buildCandidatesPath,
   buildGenerationStatePath,
@@ -60,7 +54,6 @@ const {
   buildOutputPath,
   buildWikiUrl,
   buildAiPrompt,
-  appendNotesBlock,
   extractTitleFromUrl,
   formatDate,
   generate,
@@ -1705,15 +1698,6 @@ function buildPublishTimeValidation(evidenceValidation, publishTime) {
   };
 }
 
-function buildIssueEnv(config) {
-  return {
-    redmineBase: config.env.baseUrl,
-    redmineKey: config.env.apiKey,
-    notionKey: process.env.NOTION_API_KEY,
-    projectIdentifier: config.env.projectId,
-  };
-}
-
 async function runUpdate(config, meetingDate, options = {}) {
   const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
   const reportPath = buildOutputPath(meetingDate, config);
@@ -1808,41 +1792,14 @@ async function runUpdate(config, meetingDate, options = {}) {
       : validateV1Ready(publishContent);
   };
 
-  // Publication policy is independent of the report's display depth.
-  const candidates = selectPresentationNotes(
-      snapshot.presentationCandidates || [],
-      config.env.presentationNoteMode
-    );
-  if (!candidates.length) {
-    const notice = describeEmptySelection(
-      snapshot.presentationCandidates || [],
-      config.env.presentationNoteMode
-    );
-    if (notice) console.warn(notice);
-  }
-  let presentationNotesWritten = false;
-  const loadNoteRefs = candidates.length
-    ? async () => {
-      const previewRefs = candidates.map((candidate, index) => ({
-        id: `pending-${index + 1}`,
-        title: stripAstralChars(String(candidate.title || "")),
-      }));
-      await assertReady(appendNotesBlock(reportContent, previewRefs));
-      if (!process.env.NOTION_API_KEY) {
-        throw new Error("발표노트 Issue 생성에 NOTION_API_KEY가 필요합니다.");
-      }
-      const refs = await publishNotes(buildIssueEnv(config), candidates, { assertReady, requireAll: true });
-      presentationNotesWritten = refs.some((ref) => ref.reused === false);
-      console.log(`[issue] presentation notes: ${refs.length}`);
-      return refs;
-    }
-    : null;
+  const notes = createPresentationNoteFlow({ config, snapshot, reportContent, assertReady,
+    queryCompleted: options.queryCompletedNotes, closePresented: options.closePresentedNotes });
 
   const publishedPath = buildPublishedPath(reportPath);
   const result = await update(config, meetingDate, {
     assertReady,
     draftContent: reportContent,
-    loadNoteRefs,
+    loadNoteRefs: notes.loadNoteRefs,
     generationProvider,
     generationOrigin,
     publishedPath,
@@ -1851,23 +1808,9 @@ async function runUpdate(config, meetingDate, options = {}) {
     onFinalSection: options.onFinalSection,
     verifyRemote: options.verifyRemote,
   }).catch((error) => {
-    // A later Wiki read or READY check can fail after note creation has returned.
-    // Keep that write evidence even though no Wiki PUT has been attempted yet.
-    if (presentationNotesWritten) error.serverState = "written_unverified";
-    throw error;
+    throw notes.markWriteEvidence(error);
   });
-  // 발표완료 태그가 붙은 노트의 이슈를 종료한다. 게시가 끝난 뒤에만 수행하고,
-  // 종료 실패가 주간 게시를 되돌리지 않도록 여기서 삼킨다.
-  if (config.env.presentationNoteMode !== 'off' && process.env.NOTION_API_KEY) {
-    try {
-      const issueEnv = buildIssueEnv(config);
-      const done = await (options.queryCompletedNotes || queryCompletedNotes)(issueEnv);
-      const closed = await (options.closePresentedNotes || closePresentedNotes)(issueEnv, done);
-      console.log(`[issue] ${COMPLETED_TAG} 종료: ${closed.length}/${done.length}건`);
-    } catch (err) {
-      console.warn(`[issue] 자동 종료 건너뜀: ${err.message}`);
-    }
-  }
+  await notes.closeCompleted();
   return {
     snapshot,
     snapshotPath,
