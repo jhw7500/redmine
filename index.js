@@ -1842,8 +1842,9 @@ async function main() {
     case "weekly-publish":
       return runWeeklyPublish(config, meetingDate);
     case "weekly-pair-prepare": {
-      const result = await require("./lib/weekly-report-pair").prepareWeeklyPair(config, meetingDate);
-      console.log(`[pair] depth2 + depth3 preserved: ${result.manifestPath}`);
+      const pairs = require("./lib/weekly-report-pair");
+      const result = await pairs.prepareWeeklyPair(config, meetingDate);
+      console.log(pairs.formatPreparedPairLog(result));
       return result;
     }
     case "weekly-pair-preview": {

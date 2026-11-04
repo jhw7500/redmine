@@ -204,7 +204,7 @@ send_alert() {
 # MEETING_DATE가 있으면 그 날짜만, 없으면 알림 표식이 없는 모든 날짜를 본다.
 # 어떤 실패도 래퍼의 exit status를 바꾸지 않는다.
 notify_review_needed() {
-  local pair_root=${OUTPUT_DIR:-out} file dir meta variant codes detail alert
+  local pair_root=${OUTPUT_DIR:-out} file dir detail alert
   [[ "$pair_root" = /* ]] || pair_root="$ROOT/$pair_root"
   pair_root="$pair_root/pairs"
   local -a files=()
@@ -217,18 +217,19 @@ notify_review_needed() {
     [[ -f "$file" ]] || continue
     dir=${file%/*}
     [[ -e "$dir/review-needed.notified" ]] && continue
-    # 첫 줄 variant, 둘째 줄 codes(쉼표 결합). 읽기·파싱 실패는 고정 문구로 대체한다.
-    if meta=$(node -e '
-      const j = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    # "<회의 날짜> 변형 <표시 이름>, 사유 <codes>" 한 줄. 날짜가 없거나 형식이 틀리면 폴더 이름을,
+    # 표시 이름(label)이 없으면 variant를 쓴다. 읽기·파싱 실패는 폴더 이름의 날짜와 고정 문구로 대체한다.
+    if ! detail=$(node -e '
+      const fs = require("fs"), path = require("path");
+      const file = process.argv[1];
+      const j = JSON.parse(fs.readFileSync(file, "utf8"));
       if (typeof j.variant !== "string" || !Array.isArray(j.codes)) process.exit(1);
-      console.log(j.variant.replace(/\s+/g, " "));
-      console.log(j.codes.map(String).join(",").replace(/\s+/g, " "));
+      const date = typeof j.meetingDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(j.meetingDate)
+        ? j.meetingDate : path.basename(path.dirname(file));
+      const label = typeof j.label === "string" && j.label.trim() ? j.label : j.variant;
+      console.log(`${date} 변형 ${label}, 사유 ${j.codes.map(String).join(",")}`.replace(/\s+/g, " ").trim());
     ' "$file" 2>/dev/null); then
-      variant=${meta%%$'\n'*}
-      codes=${meta#*$'\n'}
-      detail="변형 ${variant}, 사유 ${codes}"
-    else
-      detail="(review-needed.json 읽기 실패)"
+      detail="${dir##*/} (review-needed.json 읽기 실패)"
     fi
     alert="[REVIEW] $(date '+%F %T') redmine 검토 필요 — ${detail} (위키 하단 참고)"
     send_alert "$alert" normal "Redmine 검토 필요" "$alert"

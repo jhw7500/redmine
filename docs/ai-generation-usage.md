@@ -281,7 +281,7 @@ AI-enabled generate의 `prompt-input.json`에는 다음 실행 증거가 기록�
 **검토 블록** (`lib/review-block.js` `buildReviewBlock`, `lib/publisher.js` `update`의 `options.reviewBlock`)
 
 - `**검토 필요(자동)**`로 시작하고 `#` 헤더가 없다. 위치는 발표노트 블록 뒤, footer 앞.
-- 내용: 게시한 변형과 통과/실패 상태, 실패 변형별 이슈 코드와 개수 및 error 줄 발췌(변형당 최대 20줄, 줄당 최대 200자), summary 상태·사유와 gate 차단 코드 및 검증 단계에서 거부된 summary의 error 줄 발췌(같은 상한), 수집 제외 근거(repo·ref·kind만), 생략된 모바일 브리핑.
+- 내용: 게시한 변형(`요약본`/`depth2`/`depth3`으로 표시)과 통과/실패 상태, 실패 변형별 이슈 코드와 개수 및 error 줄 발췌(변형당 최대 20줄, 줄당 최대 200자), summary 상태·사유와 gate 차단 코드 및 검증 단계에서 거부된 summary의 error 줄 발췌(같은 상한), 수집 제외 근거(repo·ref·kind만), 생략된 모바일 브리핑.
 - 이슈의 `message`/`evidence`와 제외된 근거의 원문은 넣지 않는다.
 - 내용 검증은 블록 없는 섹션에, 헤더 수 검사는 블록 포함 최종 섹션에 적용한다.
 - 블록을 포함한 게시 섹션은 보고서 옆 `*.published.md`(`buildPublishedPath`)에도 저장된다. 거부 보고서 게시도 같다(`lib/weekly-pipeline.js`).
@@ -294,7 +294,7 @@ AI-enabled generate의 `prompt-input.json`에는 다음 실행 증거가 기록�
 
 **Slack 브리핑**: depth3 → 실패한 depth3가 남긴 원천 기록 → depth2 순으로 만든다. 모두 없으면 WARN을 출력하고 브리핑을 건너뛰며(검토 블록에도 한 줄 기록) send는 실패하지 않는다.
 
-**검토 필요 알림**: 블록이 비어 있지 않으면 node가 `<OUTPUT_DIR>/pairs/<date>/review-needed.json`을 쓰고 `ALERT.log`에 `[WARN]`을 남긴다. `weekly-pair-publish`가 exit 0으로 끝나면 `run-report-env.sh`의 `notify_review_needed`가 `[REVIEW] <시각> redmine 검토 필요 — 변형 <variant>, 사유 <codes> (위키 하단 참고)`를 기존 알림 채널(ALERT.log, notify-send, Telegram, Slack)로 한 번 보내고 `review-needed.notified`를 만든다. `MEETING_DATE`가 없으면 표식 없는 모든 `pairs/*/review-needed.json`을, 있으면 그 날짜만 본다.
+**검토 필요 알림**: 블록이 비어 있지 않으면 node가 `<OUTPUT_DIR>/pairs/<date>/review-needed.json`(`{schemaVersion, meetingDate, variant, label, codes}`; `variant`는 기계용 `summary`/`2`/`3`, `label`은 표시용 `요약본`/`depth2`/`depth3`)을 쓰고 `ALERT.log`에 `[WARN]`을 남긴다. `weekly-pair-publish`가 exit 0으로 끝나면 `run-report-env.sh`의 `notify_review_needed`가 `[REVIEW] <시각> redmine 검토 필요 — <회의 날짜> 변형 <label>, 사유 <codes> (위키 하단 참고)`를 기존 알림 채널(ALERT.log, notify-send, Telegram, Slack)로 한 번 보내고 `review-needed.notified`를 만든다. 파일을 읽지 못하면 폴더 이름의 날짜로 `<회의 날짜> (review-needed.json 읽기 실패)`를 보낸다. `MEETING_DATE`가 없으면 표식 없는 모든 `pairs/*/review-needed.json`을, 있으면 그 날짜만 본다.
 
 **검토 방법**
 
