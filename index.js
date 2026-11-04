@@ -1846,6 +1846,7 @@ async function runUpdate(config, meetingDate, options = {}) {
     generationProvider,
     generationOrigin,
     publishedPath,
+    reviewBlock: options.reviewBlock,
     onBeforeExternalWrite: options.onBeforeExternalWrite,
     onFinalSection: options.onFinalSection,
     verifyRemote: options.verifyRemote,
