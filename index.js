@@ -573,6 +573,7 @@ async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
     const recorded = recordWeeklyFailure({
       paths,
       state,
+      config,
       stage: failureStage,
       error,
       validation,
@@ -587,7 +588,7 @@ async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
       retryCommand: formatWeeklyPrepareRetryCommand(meetingDateText),
       now,
     });
-    console.error(formatWeeklyFailureLog(recorded.failure, recorded.markdownPath));
+    console.error(formatWeeklyFailureLog(recorded.failure, recorded.markdownPath, config));
     error.weeklyFailure = recorded;
     throw error;
   }
