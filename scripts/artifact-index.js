@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { redactWeeklyText } = require('../lib/weekly-pipeline');
+const { assertSafeCommitEvidence } = require('../lib/collector');
 
 const projectRoot = path.resolve(__dirname, '..');
 
@@ -31,8 +31,22 @@ function json(file) {
   }
 }
 
+function isSafeMetadata(value) {
+  try {
+    assertSafeCommitEvidence(value);
+    return true;
+  } catch (error) {
+    if (error.code === 'COMMIT_BODY_CREDENTIAL_DETECTED') return false;
+    throw error;
+  }
+}
+
 function text(value, limit = 140) {
-  return redactWeeklyText(value, limit).replace(/[\x00-\x1f\x7f-\x9f]/g, ' ')
+  // Classify the entire value before truncation or escaping can hide its credential shape.
+  const raw = String(value || '');
+  const safe = isSafeMetadata(raw) ? raw : '[REDACTED]';
+  const shortened = safe.length > limit ? `${safe.slice(0, limit - 1)}…` : safe;
+  return shortened.replace(/[\x00-\x1f\x7f-\x9f]/g, ' ')
     .replace(/\s+/g, ' ').trim().replace(/[\\`*_[\]<>|]/g, '\\$&');
 }
 
@@ -42,11 +56,13 @@ function status(value) {
 
 function code(value) {
   return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_.:-]{0,79}$/.test(value)
-    ? redactWeeklyText(value, 80) : '불명';
+    ? (isSafeMetadata(value) ? value : '[REDACTED]') : '불명';
 }
 
 function link(base, file, label = path.basename(file)) {
-  const relative = path.relative(base, file).split(path.sep).map(encodeURIComponent).join('/');
+  const raw = path.relative(base, file);
+  if (!isSafeMetadata(raw)) return null;
+  const relative = raw.split(path.sep).map(encodeURIComponent).join('/');
   return `[${text(label)}](${relative})`;
 }
 
@@ -56,7 +72,9 @@ function pairLines(outputDir, base) {
     .sort((a, b) => b.name.localeCompare(a.name)).map(e => {
       const dir = path.join(pairs, e.name);
       const manifest = json(path.join(dir, 'manifest.json'));
-      const parts = [link(base, dir, e.name)];
+      const pairLink = link(base, dir, e.name);
+      if (!pairLink) return null;
+      const parts = [pairLink];
       if (!manifest || ![1, 2].includes(manifest.schemaVersion) || !manifest.variants) {
         parts.push('실패/미완료 (manifest 없음 또는 읽기 실패)');
       } else {
@@ -75,7 +93,8 @@ function pairLines(outputDir, base) {
       } else parts.push('게시: 없음/읽기 실패');
       const published = [dir, ...['depth2', 'depth3', 'summary'].map(v => path.join(dir, v))]
         .flatMap(folder => entries(folder).filter(f => f.isFile() && f.name.endsWith('.published.md'))
-          .map(f => link(base, path.join(folder, f.name), path.relative(dir, path.join(folder, f.name)))));
+          .map(f => link(base, path.join(folder, f.name), path.relative(dir, path.join(folder, f.name)))))
+        .filter(Boolean);
       parts.push(`게시본: ${published.join(', ') || '없음'}`);
       const review = json(path.join(dir, 'review-needed.json'));
       if (review) {
@@ -86,7 +105,7 @@ function pairLines(outputDir, base) {
       const count = suffix => delivery.filter(f => new RegExp(`^\\d+\\.${suffix}\\.json$`).test(f.name)).length;
       parts.push(`Slack: 완료 ${count('completed')}, 시작 ${count('started')}`);
       return `- ${parts.join(' | ')}`;
-    });
+    }).filter(Boolean);
 }
 
 function artifactLines(base) {
@@ -97,21 +116,29 @@ function artifactLines(base) {
     const title = lines[0].startsWith('# ') ? lines[0].slice(2) : e.name;
     const refs = field => {
       const line = lines.find(l => l.startsWith(`- ${field}:`)) || '';
+      if (!isSafeMetadata(line)) return '[REDACTED]';
       return (line.match(/https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/(?:issues|pull)\/\d+|#\d+/g) || []).slice(0, 20).map(v => text(v)).join(', ') || '없음';
     };
-    return [`- ${link(base, file, title)} | 이슈: ${refs('이슈')} | PR: ${refs('PR')}`];
+    const reference = link(base, file, title);
+    return reference ? [`- ${reference} | 이슈: ${refs('이슈')} | PR: ${refs('PR')}`] : [];
   });
 }
 
 function archiveLines(outputDir, base) {
   const dir = path.join(outputDir, 'archive');
   const archives = entries(dir).filter(e => e.isFile() && e.name.endsWith('.tar.gz'))
-    .sort((a, b) => b.name.localeCompare(a.name)).map(e => {
+    .sort((a, b) => b.name.localeCompare(a.name)).flatMap(e => {
+      const archive = link(base, path.join(dir, e.name));
+      if (!archive) return [];
       const readme = path.join(dir, e.name.replace(/\.tar\.gz$/, '.README.md'));
-      return `- ${link(base, path.join(dir, e.name))}${plain(readme) ? ` | ${link(base, readme)}` : ' | README 없음'}`;
+      const readmeLink = plain(readme) ? link(base, readme) : null;
+      return [`- ${archive}${readmeLink ? ` | ${readmeLink}` : ' | README 없음'}`];
     });
   const backups = entries(outputDir).filter(e => e.isDirectory() && e.name.startsWith('wip-backup-'))
-    .sort((a, b) => b.name.localeCompare(a.name)).map(e => `- ${link(base, path.join(outputDir, e.name))}`);
+    .sort((a, b) => b.name.localeCompare(a.name)).flatMap(e => {
+      const reference = link(base, path.join(outputDir, e.name));
+      return reference ? [`- ${reference}`] : [];
+    });
   return [...archives, ...backups];
 }
 
