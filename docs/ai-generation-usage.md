@@ -287,6 +287,7 @@ AI-enabled generate의 `prompt-input.json`에는 다음 실행 증거가 기록�
 - 블록을 포함한 게시 섹션은 보고서 옆 `*.published.md`(`buildPublishedPath`)에도 저장된다. 거부 보고서 게시도 같다(`lib/weekly-pipeline.js`).
 - 발표노트 Redmine 이슈는 거부 경로에서도 ready 경로처럼 생성된다(`lib/presentation-note-flow.js`).
 - 거부 보고서 게시 자체가 실패하면 `<OUTPUT_DIR>/pipeline/<date>/failures/`에 단계와 `serverState`(`unchanged`/`written_unverified`/`verified`)를 담은 JSON·Markdown 기록을 남기고 `[weekly][FAIL]`을 출력한다. 정상 변형의 기존 terminal 상태와 실패 기록은 보존한다. 기록은 비밀값을 가리며, `publication.started.json`만 남은 시도는 계속 복구 승인이 필요하다.
+- 오류 메시지·스택·검증 이슈 필드는 축약 전에 공용 자격증명 탐지기로 검사하고, 의심 값이 있으면 필드 전체를 `[REDACTED]`로 바꾼다. 실행 환경과 게시 설정의 key/token/secret/password/authorization/webhook 값도 출력하지 않는다. 진단용 숫자·콜론 제한은 시간·소스 행 참조를 포함한 필드도 가릴 수 있으며, 단계·서버 상태는 별도 필드로 남긴다.
 
 **수집 제외** (`lib/collector.js`, `lib/report-snapshot.js`)
 
