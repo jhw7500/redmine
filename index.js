@@ -5,6 +5,7 @@ const { loadConfig } = require("./lib/config");
 const { buildFactCatalog } = require("./lib/fact-catalog");
 const {
   annotateFactReferences,
+  assertFactSourceMarkers,
   expandFactReferences,
   restoreUnmarkedCountedQuantityReferences,
   restoreUnmarkedIdentifierReferences,
@@ -869,6 +870,8 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
     const annotateCoverage = dependencies.annotateSourceCoverageReferences
       || annotateSourceCoverageReferences;
     const factAnnotatedSource = annotateFacts(snapshot.rawContent, catalog);
+    // Marker syntax quoted in the source must not reach the AI as a broken marker (#141).
+    assertFactSourceMarkers(factAnnotatedSource, catalog);
     const aiSource = annotateCoverage(factAnnotatedSource, coverageCatalog);
 
     initializeReportRun(runPaths, { ...generationStateBase, status: "running" });
