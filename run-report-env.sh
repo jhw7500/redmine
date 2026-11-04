@@ -154,9 +154,12 @@ bash "$ROOT/scripts/run-with-lock.sh" "$ROOT/out/report-run.lock" node "$ROOT/in
 status=$?
 set -e
 
-if [[ $status -ne 0 ]]; then
-  alert="[ALERT] $(date '+%F %T') redmine 보고 실패 — MODE=${MODE} exit=${status} (로그: $ROOT/out/cron.log)"
-  # ALERT.log가 실패를 남기는 주 방어선이다. out/은 gitignore라 clone 직후에는 없고,
+# 알림 한 줄을 모든 채널로 보낸다. 전부 best-effort라 어떤 채널이 실패해도 호출부의
+# exit status를 바꾸지 않는다.
+#   $1 알림 한 줄, $2 notify-send 긴급도, $3 notify-send 제목, $4 notify-send 본문
+send_alert() {
+  local alert=$1 urgency=$2 title=$3 body=$4 tg_token tg_chat sl_token sl_chan sl_text
+  # ALERT.log가 알림을 남기는 주 방어선이다. out/은 gitignore라 clone 직후에는 없고,
   # 그 상태에서 || true가 기록 실패를 삼키면 알림 자체가 사라진다. 먼저 만들어 둔다.
   mkdir -p "$ROOT/out" || true
   # set -e 상태이므로 알림 실패(디스크 풀 등)가 exit $status 도달을 막지 않게 한다.
@@ -165,7 +168,7 @@ if [[ $status -ne 0 ]]; then
   # 데스크톱 알림은 best-effort — cron에는 세션 버스가 없을 수 있으므로 실패를 무시한다.
   DISPLAY="${DISPLAY:-:0}" \
   DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}" \
-    notify-send -u critical "Redmine 보고 실패" "MODE=${MODE} exit=${status}" >/dev/null 2>&1 || true
+    notify-send -u "$urgency" "$title" "$body" >/dev/null 2>&1 || true
 
   # 원격 푸시 — 새벽 크론 실패는 화면 앞에 사람이 없어 notify-send가 사라진다.
   # 두 채널 모두 자격증명이 없으면 조용히 건너뛴다(설정 강제 아님). 하나가 실패해도
@@ -193,6 +196,54 @@ if [[ $status -ne 0 ]]; then
       -d "{\"channel\":\"${sl_chan}\",\"text\":\"${sl_text}\"}" \
       https://slack.com/api/chat.postMessage >/dev/null 2>&1 || true
   fi
+  return 0
+}
+
+# 쌍 게시가 검토 블록을 붙였으면(review-needed.json) 회의 날짜당 한 번만 [REVIEW]를 보낸다.
+# 래퍼는 index.js가 계산한 회의 날짜를 알 수 없으므로(publish auto는 MEETING_DATE가 없다)
+# MEETING_DATE가 있으면 그 날짜만, 없으면 알림 표식이 없는 모든 날짜를 본다.
+# 어떤 실패도 래퍼의 exit status를 바꾸지 않는다.
+notify_review_needed() {
+  local pair_root=${OUTPUT_DIR:-out} file dir detail alert
+  [[ "$pair_root" = /* ]] || pair_root="$ROOT/$pair_root"
+  pair_root="$pair_root/pairs"
+  local -a files=()
+  if [[ -n "${MEETING_DATE:-}" ]]; then
+    files=("$pair_root/$MEETING_DATE/review-needed.json")
+  else
+    files=("$pair_root"/*/review-needed.json)
+  fi
+  for file in "${files[@]}"; do
+    [[ -f "$file" ]] || continue
+    dir=${file%/*}
+    [[ -e "$dir/review-needed.notified" ]] && continue
+    # "<회의 날짜> 변형 <표시 이름>, 사유 <codes>" 한 줄. 날짜가 없거나 형식이 틀리면 폴더 이름을,
+    # 표시 이름(label)이 없으면 variant를 쓴다. 읽기·파싱 실패는 폴더 이름의 날짜와 고정 문구로 대체한다.
+    if ! detail=$(node -e '
+      const fs = require("fs"), path = require("path");
+      const file = process.argv[1];
+      const j = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (typeof j.variant !== "string" || !Array.isArray(j.codes)) process.exit(1);
+      const date = typeof j.meetingDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(j.meetingDate)
+        ? j.meetingDate : path.basename(path.dirname(file));
+      const label = typeof j.label === "string" && j.label.trim() ? j.label : j.variant;
+      console.log(`${date} 변형 ${label}, 사유 ${j.codes.map(String).join(",")}`.replace(/\s+/g, " ").trim());
+    ' "$file" 2>/dev/null); then
+      detail="${dir##*/} (review-needed.json 읽기 실패)"
+    fi
+    alert="[REVIEW] $(date '+%F %T') redmine 검토 필요 — ${detail} (위키 하단 참고)"
+    send_alert "$alert" normal "Redmine 검토 필요" "$alert"
+    # 표식은 알림을 보낸 뒤에만 만든다. 만들지 못하면 다음 실행이 다시 보낸다.
+    : > "$dir/review-needed.notified" || true
+  done
+  return 0
+}
+
+if [[ $status -ne 0 ]]; then
+  alert="[ALERT] $(date '+%F %T') redmine 보고 실패 — MODE=${MODE} exit=${status} (로그: $ROOT/out/cron.log)"
+  send_alert "$alert" critical "Redmine 보고 실패" "MODE=${MODE} exit=${status}"
+elif [[ "$MODE" == weekly-pair-publish ]]; then
+  notify_review_needed || true
 fi
 
 exit $status
