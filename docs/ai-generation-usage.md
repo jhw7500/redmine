@@ -281,18 +281,20 @@ AI-enabled generate의 `prompt-input.json`에는 다음 실행 증거가 기록�
 **검토 블록** (`lib/review-block.js` `buildReviewBlock`, `lib/publisher.js` `update`의 `options.reviewBlock`)
 
 - `**검토 필요(자동)**`로 시작하고 `#` 헤더가 없다. 위치는 발표노트 블록 뒤, footer 앞.
-- 내용: 게시한 변형(`요약본`/`depth2`/`depth3`으로 표시)과 통과/실패 상태, 실패 변형별 이슈 코드와 개수 및 error 줄 발췌(변형당 최대 20줄, 줄당 최대 200자), summary 상태·사유와 gate 차단 코드 및 검증 단계에서 거부된 summary의 error 줄 발췌(같은 상한), 수집 제외 근거(repo·ref·kind만), 생략된 모바일 브리핑.
+- 내용: 게시한 변형(`요약본`/`depth2`/`depth3`으로 표시)과 통과/실패 상태, 실패 변형별 이슈 코드와 개수 및 error → warning 순서의 문제 줄 발췌(변형당 합쳐 최대 20줄, 줄당 최대 200자), summary 상태·사유와 gate 차단 코드 및 거부된 summary의 문제 줄 발췌(같은 상한), 수집 제외 근거(repo·ref·kind만), 생략된 모바일 브리핑.
 - 이슈의 `message`/`evidence`와 제외된 근거의 원문은 넣지 않는다.
 - 내용 검증은 블록 없는 섹션에, 헤더 수 검사는 블록 포함 최종 섹션에 적용한다.
 - 블록을 포함한 게시 섹션은 보고서 옆 `*.published.md`(`buildPublishedPath`)에도 저장된다. 거부 보고서 게시도 같다(`lib/weekly-pipeline.js`).
 - 발표노트 Redmine 이슈는 거부 경로에서도 ready 경로처럼 생성된다(`lib/presentation-note-flow.js`).
+- 거부 보고서 게시 자체가 실패하면 `<OUTPUT_DIR>/pipeline/<date>/failures/`에 단계와 `serverState`(`unchanged`/`written_unverified`/`verified`)를 담은 JSON·Markdown 기록을 남기고 `[weekly][FAIL]`을 출력한다. 정상 변형의 기존 terminal 상태와 실패 기록은 보존한다. 기록은 비밀값을 가리며, `publication.started.json`만 남은 시도는 계속 복구 승인이 필요하다.
 
 **수집 제외** (`lib/collector.js`, `lib/report-snapshot.js`)
 
 - 커밋·PR·이슈 본문이 credential 검사에 걸리면 수집이 중단되지 않고 그 단위만 제외한다.
-- snapshot에 `droppedEvidence: [{source, repo, ref, kind}]`로 기록한다. 검사 버전 상수 `COMMIT_BODY_CREDENTIAL_SCAN_VERSION`은 31이다.
+- snapshot에 `droppedEvidence: [{source, repo, ref, kind}]`로 기록한다. 새 수집·sealed snapshot 재사용·snapshot 로드 시 제외 항목마다 source·repo·ref·kind만 담은 `[collect][WARN]`을 출력한다. 형식이 맞지 않거나 자격증명이 의심되는 메타데이터도 그대로 출력하지 않는다.
+- 검사 버전 상수 `COMMIT_BODY_CREDENTIAL_SCAN_VERSION`은 32다. Telegram 및 실제 설정의 자격증명 이름을 검사한다. 버전 31 snapshot은 수집 시 다시 만들고, generate/update/revalidate/publish에서는 재사용을 거부한다. 배포 전에 준비된 pair를 새 코드로 게시하지 말고 새 버전에서 다시 준비해야 한다.
 
-**Slack 브리핑**: depth3 → 실패한 depth3가 남긴 원천 기록 → depth2 순으로 만든다. 모두 없으면 WARN을 출력하고 브리핑을 건너뛰며(검토 블록에도 한 줄 기록) send는 실패하지 않는다.
+**Slack 브리핑**: depth3 → 실패한 depth3가 남긴 원천 기록 → depth2(통과본 또는 실패 시 남긴 원천 기록) 순으로 만든다. `sourceDepth`와 안내 문구는 실제 원천을 나타내고, `slack.depth3.json` 파일 이름과 send의 바이트 대조 계약은 유지한다. 모두 없으면 WARN을 출력하고 브리핑을 건너뛰며(검토 블록에도 한 줄 기록) send는 실패하지 않는다. 변경 전 대체 원천으로 만든 브리핑은 새 코드에서 다시 준비해야 send의 내용 대조를 통과한다.
 
 **검토 필요 알림**: 블록이 비어 있지 않으면 node가 `<OUTPUT_DIR>/pairs/<date>/review-needed.json`(`{schemaVersion, meetingDate, variant, label, codes}`; `variant`는 기계용 `summary`/`2`/`3`, `label`은 표시용 `요약본`/`depth2`/`depth3`)을 쓰고 `ALERT.log`에 `[WARN]`을 남긴다. `weekly-pair-publish`가 exit 0으로 끝나면 `run-report-env.sh`의 `notify_review_needed`가 `[REVIEW] <시각> redmine 검토 필요 — <회의 날짜> 변형 <label>, 사유 <codes> (위키 하단 참고)`를 기존 알림 채널(ALERT.log, notify-send, Telegram, Slack)로 한 번 보내고 `review-needed.notified`를 만든다. 파일을 읽지 못하면 폴더 이름의 날짜로 `<회의 날짜> (review-needed.json 읽기 실패)`를 보낸다. `MEETING_DATE`가 없으면 표식 없는 모든 `pairs/*/review-needed.json`을, 있으면 그 날짜만 본다.
 
