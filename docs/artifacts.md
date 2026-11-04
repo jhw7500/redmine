@@ -51,6 +51,9 @@ message/evidence, 보고서 본문, Slack 수신자·메시지와 자격증명�
 제목·이슈·PR 줄과 링크 상대경로는 축약·참조 추출·URL 인코딩 전에 수집기의
 `assertSafeCommitEvidence`로 검사한다. 자격증명 의심 표시값은 전체를 `[REDACTED]`로
 바꾸고, 의심 경로의 링크/항목은 제외한다. 원본 파일은 변경하지 않는다.
+색인 전용 검사에서는 숫자 바로 뒤 `:`와 공백 없는 값이 이어지는 형태를 길이나
+문자 집합으로 예외 처리하지 않는다. Telegram 토큰과 구분할 수 없는 시간·행 참조도
+색인에서는 가려질 수 있다. 일반 수집에는 이 색인 전용 제한을 적용하지 않는다.
 입력의 symlink는 따라가지 않으며, INDEX.md는 원자적으로 갱신하는 mode 0600 파일이다.
 기계용 INDEX.json은 만들지 않는다.
 
@@ -73,13 +76,14 @@ message/evidence, 보고서 본문, Slack 수신자·메시지와 자격증명�
 | `issue-141/` | `2026-11-04-issue-141/` | 33 | `2f0714eee28a4a316c701b89a0d553d894819a3d5b9ad3c723fbca998a95aa84` |
 | `issue-drafts/` | `2026-11-04-issue-drafts/` | 4 | `9c611051aa47c06492e1aeb6bacb15c089e2458326dc153df94f3b76f20e144e` |
 | `out-cleanup/` | `2026-11-04-out-cleanup/` | 1 | `e94080782e7d8ebd816f4fc549f3cab63ede7a736df5af086f5b377e8cc12c1a` |
-| `rehearsal-1111-v1/` | `2026-11-04-rehearsal-1111-v1/` | 59 | `6641e7b488743c9009f81012a77451fd96ade74d6d4e3815950f3ef0b923e32d` |
-| `rehearsal-1111-v2/` | `2026-11-04-rehearsal-1111-v2/` | 60 | `0ac344d1fbb2a3a680e1780cf5501245e1847a3e21f6569f212e3743033253c7` |
+| `rehearsal-1111-v1/` | `2026-11-04-rehearsal-1111-v1/` | 59 | `323caefa3cf545f6aca65325f337bbcf6a267a3b8b3fab420149640e9f06764c` |
+| `rehearsal-1111-v2/` | `2026-11-04-rehearsal-1111-v2/` | 60 | `34b6488bfcf25d7d85cd48eeba376bb07d615941ad969021445c4a1855f87c00` |
 | `tribunal/` | `2026-11-04-tribunal/` | 33 | `0aa25e052d9db98c71f042633ab0d0fb119306362eae9d98874b4d05a1b206de` |
 
 총 218개 원본 파일의 SHA-256과 파일 권한을 복사본과 전수 대조했다. Files와
 인벤토리 해시는 원본 파일만 센다. 각 Target에 새로 추가한 README는 별도이다.
-해시는 원본 상대경로순으로 정렬한 `{path, mode, sha256}` 레코드 배열을
+해시는 각 파일의 전체 상대경로를 UTF-8 바이트 사전순으로 정렬한
+`{path, mode, sha256}` 레코드 배열을
 `JSON.stringify`와 같은 공백 없는 UTF-8 JSON(키 순서 mode, path, sha256)으로 만든 뒤
 SHA-256을 계산한 값이다. mode는 4자리 8진수, path는 `/` 구분 상대경로다.
 

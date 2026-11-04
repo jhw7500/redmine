@@ -33,7 +33,7 @@ function json(file) {
 
 function isSafeMetadata(value) {
   try {
-    assertSafeCommitEvidence(value);
+    assertSafeCommitEvidence(value, { artifactMetadata: true });
     return true;
   } catch (error) {
     if (error.code === 'COMMIT_BODY_CREDENTIAL_DETECTED') return false;
