@@ -222,7 +222,7 @@ OUTPUT_DIR/pairs/YYYY-MM-DD/
 ```bash
 rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh prepare
 # codex 가 쿼터에 걸리면 provider 를 인자로 바꾼다. 인자 생략 시 codex.
-# provider 를 고르면 모델은 따라 고정된다(codex→gpt-5.6-sol, claude→sonnet).
+# provider 를 고르면 모델은 따라 고정된다(codex→gpt-5.6-sol, claude→opus).
 # 상속된 AI_PROVIDER/AI_MODEL 은 어느 경우에도 무시된다.
 rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh prepare claude
 rtk env MEETING_DATE=2026-09-16 ./run-weekly-pair-env.sh preview

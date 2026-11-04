@@ -253,7 +253,7 @@ async function runCollect(config, meetingDate) {
 
 // weekly-prepare는 provider를 골라쓸 수 있지만, 고른 뒤에는 모델이 고정된다.
 // 한 provider가 리미트에 걸려도 주간 보고가 멈추지 않게 하려는 것이다.
-const WEEKLY_PREPARE_PROVIDER_MODELS = { codex: "gpt-5.6-sol", claude: "sonnet" };
+const WEEKLY_PREPARE_PROVIDER_MODELS = { codex: "gpt-5.6-sol", claude: "opus" };
 
 function assertWeeklyProfile(config, mode, { generationMethod = "source_selection" } = {}) {
   if (!["weekly-prepare", "weekly-publish"].includes(mode)) return;

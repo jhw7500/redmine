@@ -60,7 +60,7 @@ case $_weekly_profile in
     export AI_SUMMARIZE=1
     if [[ $_weekly_profile == prepare-claude ]]; then
       export AI_PROVIDER=claude
-      export AI_MODEL=sonnet
+      export AI_MODEL=opus
     else
       export AI_PROVIDER=codex
       export AI_MODEL=gpt-5.6-sol
