@@ -266,6 +266,44 @@ AI-enabled generate의 `prompt-input.json`에는 다음 실행 증거가 기록�
 
 근거 구절 변조·다른 프로젝트로 이동·중복 선택·프로젝트 내 사용 가능한 수치 근거의 전부 생략은 차단하며 `VALIDATION_OVERRIDE`로 우회하지 않는다. 기존 Q/V 검증과 과거 catalog는 유지한다. 이 검사는 자유롭게 작성한 상위 설명의 의미나 적용 단계를 전부 증명하지 않으므로 최종 내용 검토가 필요하다. 코드식 API·시험 장비 명칭은 팀 독자가 이해할 업무 표현으로 작성하며, 알려진 명칭이 남으면 품질 검사에서 차단한다.
 
+## 주간 pair 최선 게시와 검토 블록 (#138)
+
+`MODE=weekly-pair-publish`의 `auto`는 검증에 실패한 주도 멈추지 않고 가능한 보고서를 게시하고, 위키 하단에 검토 블록을 붙인다. 같은 검증 실패라도 `MODE=update`는 기존대로 차단한다.
+
+**게시 순서** (`lib/weekly-report-pair.js` `publishWeeklyPair`)
+
+1. 통과한 summary → 통과한 depth2 → 통과한 depth3 순으로 고른다.
+2. 통과한 변형이 없으면 거부된 보고서를 summary → depth2 → depth3 순으로 첫 사용 가능한 것을 문제 줄 포함 그대로 게시. 섹션 헤더가 정확히 1개여야 하고, manifest 경로가 pair 폴더 안으로 해석되는 것만 후보가 된다.
+3. 후보가 없으면 `NO_PUBLISHABLE_REPORT`로 실패한다. exit가 0이 아니므로 기존 `[ALERT] … 보고 실패` 알림이 나간다.
+4. depth를 2 또는 3으로 명시하면 실패한 변형은 여전히 게시 거부.
+5. 거부 보고서 게시는 영수증에 `status: "rejected_published"`를 남긴다. 같은 날짜 재게시는 `Already published`로 거부되고, `publication.started.json`만 있고 `completed`가 없는 중단 상태는 복구 승인이 필요하다.
+
+**검토 블록** (`lib/review-block.js` `buildReviewBlock`, `lib/publisher.js` `update`의 `options.reviewBlock`)
+
+- `**검토 필요(자동)**`로 시작하고 `#` 헤더가 없다. 위치는 발표노트 블록 뒤, footer 앞.
+- 내용: 게시한 변형과 통과/실패 상태, 실패 변형별 이슈 코드와 개수 및 error 줄 발췌(변형당 최대 20줄, 줄당 최대 200자), summary 상태·사유와 gate 차단 코드, 수집 제외 근거(repo·ref·kind만), 생략된 모바일 브리핑.
+- 이슈의 `message`/`evidence`와 제외된 근거의 원문은 넣지 않는다.
+- 내용 검증은 블록 없는 섹션에, 헤더 수 검사는 블록 포함 최종 섹션에 적용한다.
+- 블록을 포함한 게시 섹션은 보고서 옆 `*.published.md`(`buildPublishedPath`)에도 저장된다. 거부 보고서 게시도 같다(`lib/weekly-pipeline.js`).
+- 발표노트 Redmine 이슈는 거부 경로에서도 ready 경로처럼 생성된다(`lib/presentation-note-flow.js`).
+
+**수집 제외** (`lib/collector.js`, `lib/report-snapshot.js`)
+
+- 커밋·PR·이슈 본문이 credential 검사에 걸리면 수집이 중단되지 않고 그 단위만 제외한다.
+- snapshot에 `droppedEvidence: [{source, repo, ref, kind}]`로 기록한다. 검사 버전 상수 `COMMIT_BODY_CREDENTIAL_SCAN_VERSION`은 31이다.
+
+**Slack 브리핑**: depth3 → 실패한 depth3가 남긴 원천 기록 → depth2 순으로 만든다. 모두 없으면 WARN을 출력하고 브리핑을 건너뛰며(검토 블록에도 한 줄 기록) send는 실패하지 않는다.
+
+**검토 필요 알림**: 블록이 비어 있지 않으면 node가 `<OUTPUT_DIR>/pairs/<date>/review-needed.json`을 쓰고 `ALERT.log`에 `[WARN]`을 남긴다. `weekly-pair-publish`가 exit 0으로 끝나면 `run-report-env.sh`의 `notify_review_needed`가 `[REVIEW] <시각> redmine 검토 필요 — 변형 <variant>, 사유 <codes> (위키 하단 참고)`를 기존 알림 채널(ALERT.log, notify-send, Telegram, Slack)로 한 번 보내고 `review-needed.notified`를 만든다. `MEETING_DATE`가 없으면 표식 없는 모든 `pairs/*/review-needed.json`을, 있으면 그 날짜만 본다.
+
+**검토 방법**
+
+1. 위키 해당 섹션 하단의 `**검토 필요(자동)**` 블록을 읽는다.
+2. 보고서 옆 `*.published.md`로 게시된 전문을 확인한다.
+3. `pairs/<date>/review-needed.json`의 변형·사유 코드, `out/ALERT.log`, `out/cron.log`로 원인을 추적한다.
+4. 같은 날짜 재게시는 `Already published`로 막혀 있으므로 교체에는 복구 승인이 필요하다.
+5. `review-needed.notified`가 있으면 알림이 재전송되지 않는다. 다시 받으려면 이 파일을 지운다.
+
 ## 실패 코드별 대응
 
 | 코드/상태 | 의미 | 대응 |
