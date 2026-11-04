@@ -246,4 +246,7 @@ elif [[ "$MODE" == weekly-pair-publish ]]; then
   notify_review_needed || true
 fi
 
+# 알림 표식까지 반영하되, 색인 실패는 보고서 결과나 기존 알림을 바꾸지 않는다.
+node "$ROOT/scripts/artifact-index.js" || true
+
 exit $status
