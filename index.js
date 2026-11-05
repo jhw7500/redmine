@@ -79,7 +79,11 @@ const { validateV2ReportContract } = require("./lib/report-contract");
 const { buildGenerationPlan } = require("./lib/report-generation-plan");
 const { buildSourceRecords, buildSelectionPrompt } = require("./lib/source-selection");
 const { generateSourceSelection, assertSourceSelectionConfig } = require("./lib/source-selection-generation");
-const { enforceSourceSelectionStatus, assertSourceSelectionEvidence } = require("./lib/source-selection-evidence");
+const {
+  enforceSourceSelectionStatus,
+  assertSourceSelectionEvidence,
+  renderSourceSelectionEvidence,
+} = require("./lib/source-selection-evidence");
 const {
   annotateSourceCoverageReferences,
   buildSourceCoverageCatalog,
@@ -166,6 +170,9 @@ const NON_OVERRIDABLE_V2_CODES = new Set([
   "invalid_test_ratio",
   "unsafe_test_count",
   "unmarked_protected_fact",
+  "verdict_catalog_mismatch",
+  "verdict_context_mismatch",
+  "duplicate_verdict_claim",
   "snapshot_hash_mismatch",
   "catalog_hash_mismatch",
   "coverage_catalog_hash_mismatch",
@@ -1015,6 +1022,9 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
     });
     aiComplete = true;
 
+    const verdictProjection = records
+      ? renderSourceSelectionEvidence(records, generated.evidence, config, catalog)
+      : undefined;
     const result = validateV2ReportContract(
       snapshot.rawContent,
       workingContent,
@@ -1031,6 +1041,7 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
         openIssueVerifierOptions: resolveOpenIssueVerifierOptions(config),
         knownPaths: coverageCatalog.knownPaths,
         sourceCoverageMode,
+        verdictProjection,
       }
     );
     result.validation = enforceSourceSelectionStatus(result.validation, generationStateBase.generationMethod, {
@@ -1251,6 +1262,7 @@ async function runRevalidate(config, meetingDate) {
       sectionHeader: config.env.sectionHeader,
       repos: config.repos,
       openIssueVerifierOptions: resolveOpenIssueVerifierOptions(config),
+      verdictProjection: selectionContext?.verdictProjection,
     };
     const result = coverageOwnership.enabled
       ? validateV2ReportContract(
@@ -1672,8 +1684,45 @@ function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, 
     );
   }
 
+  const validationOptions = {
+    attemptId: current.attemptId,
+    meetingDate: formatDate(meetingDate),
+    reportDepth: Number(config.env.reportDepth),
+    snapshotHash: snapshot.contentHash,
+    snapshotPath: config.env.snapshotPath,
+    sectionHeader: config.env.sectionHeader,
+    repos: config.repos,
+    openIssueVerifierOptions: resolveOpenIssueVerifierOptions(config),
+    verdictProjection: selectionContext?.verdictProjection,
+  };
+  const currentContract = run.coverageCatalog
+    ? validateV2ReportContract(
+      snapshot.rawContent,
+      annotatedContent,
+      run.catalog,
+      run.coverageCatalog,
+      {
+        ...validationOptions,
+        knownPaths: run.coverageCatalog.knownPaths,
+        sourceCoverageMode: SOURCE_COVERAGE_MODE,
+      }
+    )
+    : validateAnnotatedReport(
+      snapshot.rawContent,
+      annotatedContent,
+      run.catalog,
+      validationOptions
+    );
+  currentContract.validation = enforceSourceSelectionStatus(
+    currentContract.validation,
+    run.state.generationMethod,
+    { ...selectionContext, reportDepth:run.state.reportDepth }
+  );
+  currentContract.validation.publishable = isPublishable(currentContract.validation);
+  assertPublishable(currentContract.validation, config);
+
   return {
-    validation: effectiveValidation,
+    validation: currentContract.validation,
     run,
     generationProvider: promptInput.provider,
     generationOrigin: selectionContext?.evidence?.origin || "ai",
