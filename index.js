@@ -573,6 +573,7 @@ async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
     const recorded = recordWeeklyFailure({
       paths,
       state,
+      config,
       stage: failureStage,
       error,
       validation,
@@ -587,7 +588,7 @@ async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
       retryCommand: formatWeeklyPrepareRetryCommand(meetingDateText),
       now,
     });
-    console.error(formatWeeklyFailureLog(recorded.failure, recorded.markdownPath));
+    console.error(formatWeeklyFailureLog(recorded.failure, recorded.markdownPath, config));
     error.weeklyFailure = recorded;
     throw error;
   }
@@ -1822,8 +1823,7 @@ async function runUpdate(config, meetingDate, options = {}) {
   };
 }
 
-async function main() {
-  const config = loadConfig();
+async function main(config = loadConfig()) {
   console.log(`Mode: ${config.env.mode}`);
   if (config.env.mode === "prune") {
     const result = runPrune(config);
@@ -1912,9 +1912,14 @@ module.exports = {
 
 // Weekly orchestration resolves these entry points lazily; export before CLI execution.
 if (require.main === module) {
-  main().catch((error) => {
+  // Keep the run configuration available even when durable failure recording fails.
+  let config;
+  (async () => {
+    config = loadConfig();
+    return main(config);
+  })().catch((error) => {
     if (!error.weeklyFailure) {
-      console.error(`[error] ${redactWeeklyText(error.message || "Command failed", 500).replace(/\s+/g, " ")}`);
+      console.error(`[error] ${redactWeeklyText(error.message || "Command failed", 500, config).replace(/\s+/g, " ")}`);
     }
     process.exitCode = 1;
   });
