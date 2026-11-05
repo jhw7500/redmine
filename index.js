@@ -432,6 +432,7 @@ function prepareFailureArtifacts(outputDir, collectResult, generationResult, gen
 async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
   // Weekly variants are source_selection; only the pair summary asks for freeform.
   const generationMethod = dependencies.generationMethod ?? "source_selection";
+  const optionalSummary = dependencies.optionalSummary === true;
   assertWeeklyProfile(config, "weekly-prepare", { generationMethod });
   const collect = dependencies.runCollect || runCollect;
   const generateReport = dependencies.runGenerate || runGenerate;
@@ -592,10 +593,10 @@ async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
       ),
       redmineWriteAttempted: false,
       serverState: "unchanged",
-      retryCommand: formatWeeklyPrepareRetryCommand(meetingDateText),
+      retryCommand: optionalSummary ? null : formatWeeklyPrepareRetryCommand(meetingDateText),
       now,
     });
-    console.error(formatWeeklyFailureLog(recorded.failure, recorded.markdownPath, config));
+    console.error(formatWeeklyFailureLog(recorded.failure, recorded.markdownPath, config, { optionalSummary }));
     error.weeklyFailure = recorded;
     throw error;
   }
