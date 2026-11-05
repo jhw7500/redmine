@@ -336,9 +336,19 @@ Redmine 게시가 실패해도 보존된 depth3 상세본은 독립적으로 발
 
 ```cron
 5 6 * * 3 /home/jhw/ai/opencode/projects/redmine/run-weekly-pair-env.sh prepare >> /home/jhw/ai/opencode/projects/redmine/out/cron.log 2>&1
-45 6 * * 3 /home/jhw/ai/opencode/projects/redmine/run-weekly-pair-env.sh publish 2 >> /home/jhw/ai/opencode/projects/redmine/out/cron.log 2>&1
+45 6 * * 3 /home/jhw/ai/opencode/projects/redmine/run-weekly-pair-env.sh publish auto >> /home/jhw/ai/opencode/projects/redmine/out/cron.log 2>&1
 5 7 * * 3 /home/jhw/ai/opencode/projects/redmine/run-weekly-pair-env.sh send >> /home/jhw/ai/opencode/projects/redmine/out/cron.log 2>&1
 ```
+
+`publish auto`는 통과한 요약본 → depth2 → depth3 순으로 선택한다. 통과한 보고서가 없으면
+사용 가능한 거부 보고서를 요약본 → depth2 → depth3 순으로 골라 원문과 검토 필요 표시를
+게시한다. 자세한 조건은 [게시 순서 정본과 검토 블록](docs/ai-generation-usage.md#주간-pair-최선-게시와-검토-블록-138)을 참조한다.
+요약본 대신 다른 보고서를 게시하면 실제 선택된 변형과 사유를 `OUTPUT_DIR/ALERT.log`에
+한 번 기록한다. 선택 당시 사유와 이벤트 ID는 시작·완료 영수증에 보존한다. ALERT 쓰기가
+실패하면 `fallback alert pending` 경고를 남기며, 완료 재실행에서 원래 사유로 누락을 복구한다.
+로그의 이벤트 ID를 잠금 안에서 대조하므로 이미 기록된 경고는 추가하지 않는다.
+시작 영수증만 남은 중단 상태와 게시 실패에는 경고를 추가하지 않는다. 과거 영수증에
+선택 사유가 없으면 새 사유를 추측해 복원하지 않는다.
 
 아래 두 줄은 Slack pair 기능을 사용하지 않는 기존 단일-depth 운영안이다. 실제 crontab 교체
 전에는 현재 내용을 별도 파일로 백업하고, 다른 항목이 byte 단위로 유지되는지 확인한다.
@@ -356,9 +366,12 @@ Redmine 게시가 실패해도 보존된 depth3 상세본은 독립적으로 발
 | `out/pipeline/YYYY-MM-DD/failures/<timestamp>-<stage>-<attempt>.json` | 안정된 오류 code, 원래 세부 `primaryIssueCode`, issue 집계, 산출물 hash, Redmine 쓰기 여부와 서버 상태 |
 | `out/pipeline/YYYY-MM-DD/failures/<timestamp>-<stage>-<attempt>.md` | 원인, 대표 issue, 서버 상태, 확인할 산출물, 같은 회의일 재실행 명령을 읽기 순서로 정리한 장애 기록 |
 
-`[weekly][FAIL]`은 비정상 종료와 함께 `stage`, 가장 구체적인 detail code, 짧은 원인,
+`[weekly][FAIL]`은 해당 준비·게시 시도의 실패와 함께 `stage`, 가장 구체적인 detail code, 짧은 원인,
 Markdown 장애 파일을 한 줄로 가리킨다. 안정된 분류 code와 `primaryIssueCode`는 JSON에서
 확인하며, Markdown은 원인·issue 집계와 예시·서버 상태·산출물·재실행 명령을 제공한다.
+선택 요약본 준비 실패는 `[summary][WARN]`으로 기록하며 pair의 성공 여부와 구분한다.
+해당 실패 기록은 `retryCommand: null`과 재시도 금지 안내를 담는다. 같은 주의 요약본을
+재생성하지 않고 보존된 pair의 다른 보고서와 게시 상태를 확인한다.
 `[weekly][SKIP] status=failed`는 prepare가 이미 실패해 publish가 exit 0으로 끝났다는 뜻이고,
 `[weekly][SKIP] already-published`는 검증 완료한 같은 attempt를 멱등하게 건너뛴다는 뜻이다.
 두 SKIP 모두 새 장애 파일이나 알림을 만들지 않고 Redmine 요청도 보내지 않는다.
