@@ -282,11 +282,17 @@ AI-enabled generate의 `prompt-input.json`에는 다음 실행 증거가 기록�
 
 **게시 순서** (`lib/weekly-report-pair.js` `publishWeeklyPair`)
 
-1. 통과한 summary → 통과한 depth2 → 통과한 depth3 순으로 고른다.
-2. 통과한 변형이 없으면 거부된 보고서를 summary → depth2 → depth3 순으로 첫 사용 가능한 것을 문제 줄 포함 그대로 게시. 섹션 헤더가 정확히 1개여야 하고, manifest 경로가 pair 폴더 안으로 해석되는 것만 후보가 된다.
+1. 통과한 summary → 검증 실패 후 보존한 summary → 통과한 depth2 → 통과한 depth3 순으로 고른다.
+2. summary를 만들 수 없고 통과한 상세본도 없으면 거부된 depth2 → depth3 중 첫 사용 가능한 것을 문제 줄 포함 그대로 게시한다. 거부 후보는 파일 내용이 기록된 해시와 일치하고 섹션 헤더가 정확히 1개이며 경로가 pair 폴더 안으로 해석되어야 한다.
 3. 후보가 없으면 `NO_PUBLISHABLE_REPORT`로 실패한다. exit가 0이 아니므로 기존 `[ALERT] … 보고 실패` 알림이 나간다.
 4. depth를 2 또는 3으로 명시하면 실패한 변형은 여전히 게시 거부.
 5. 거부 보고서 게시는 영수증에 `status: "rejected_published"`를 남긴다. 같은 날짜 재실행은 영수증이 지금 고른 거부 보고서(변형·depth·보고서 해시·`rejected_published`)와 정확히 같으면 쓰기 없이 skip(exit 0)하고, 다르면 `Already published`로 거부된다. `publication.started.json`만 있고 `completed`가 없는 중단 상태는 복구 승인이 필요하다.
+
+팀 요약본은 프로젝트별 사실·출처 검증 오류가 있어도 다음 프로젝트를 한 번씩 생성하고,
+합친 요약본을 기존 최종 검증에 넘긴다. 실패하면 검증 결과와 전체 거부 보고서를 보존해
+검토 표시와 함께 게시한다. 잘못된 프로젝트·섹션 구조와 응답 없음·AI 호출 실패는 계속
+생성을 중단하며, 완성된 요약본이 없으면 상세본을 선택한다. 일반 생성은 기존처럼 첫
+프로젝트 검증 오류에서 중단한다. 이 정책은 이미 게시한 보고서를 자동으로 교체하지 않는다.
 
 **검토 블록** (`lib/review-block.js` `buildReviewBlock`, `lib/publisher.js` `update`의 `options.reviewBlock`)
 

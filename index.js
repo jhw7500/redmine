@@ -961,6 +961,8 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       prompt:selectionPrompt, onRawAiOutput:captureRawAiOutput,
     }) : await generateContent(config, meetingDate, aiSource, {
       ...promptOptions,
+      retainInvalidProjectOutputs: config.env.retainRejectedSummary === true
+        && config.env.reportAudience === "team",
       factSourceContent: snapshot.rawContent,
       generationPlan,
       onRawAiOutput: captureRawAiOutput,
