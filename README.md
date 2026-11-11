@@ -340,9 +340,11 @@ Redmine 게시가 실패해도 보존된 depth3 상세본은 독립적으로 발
 5 7 * * 3 /home/jhw/ai/opencode/projects/redmine/run-weekly-pair-env.sh send >> /home/jhw/ai/opencode/projects/redmine/out/cron.log 2>&1
 ```
 
-`publish auto`는 통과한 요약본 → depth2 → depth3 순으로 선택한다. 통과한 보고서가 없으면
-사용 가능한 거부 보고서를 요약본 → depth2 → depth3 순으로 골라 원문과 검토 필요 표시를
-게시한다. 자세한 조건은 [게시 순서 정본과 검토 블록](docs/ai-generation-usage.md#주간-pair-최선-게시와-검토-블록-138)을 참조한다.
+`publish auto`는 통과한 요약본 → 검증 실패 후 보존한 요약본 → 통과한 depth2 → 통과한 depth3
+순으로 선택한다. 요약본을 만들 수 없고 통과한 상세본도 없으면 보존한 depth2 → depth3를 고른다.
+팀 요약본은 프로젝트별 사실·출처 검증 오류가 있어도 나머지 프로젝트를 생성하고, 합친 결과의
+최종 검증과 실패 기록을 보존한다. 검증 실패 요약본과 상세본에는 검토 필요 표시가 붙는다.
+자세한 조건은 [게시 순서 정본과 검토 블록](docs/ai-generation-usage.md#주간-pair-최선-게시와-검토-블록-138)을 참조한다.
 요약본 대신 다른 보고서를 게시하면 실제 선택된 변형과 사유를 `OUTPUT_DIR/ALERT.log`에
 한 번 기록한다. 선택 당시 사유와 이벤트 ID는 시작·완료 영수증에 보존한다. ALERT 쓰기가
 실패하면 `fallback alert pending` 경고를 남기며, 완료 재실행에서 원래 사유로 누락을 복구한다.
