@@ -423,6 +423,7 @@
     },
     "teamReport": {
       "enabled": true,
+      "selectionProfile": "team_summary_v1",
       "advisoryMaxBullets": 60,
       "termAliases": {
         "cam-operate restart": "카메라 재시작",

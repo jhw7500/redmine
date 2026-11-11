@@ -78,6 +78,8 @@ const {
 const { validateV2ReportContract } = require("./lib/report-contract");
 const { buildGenerationPlan } = require("./lib/report-generation-plan");
 const { buildSourceRecords, buildSelectionPrompt } = require("./lib/source-selection");
+const { TEAM_SUMMARY_PROFILE, buildTeamSummaryRecords, buildTeamSummaryPrompt } = require("./lib/team-summary-selection");
+const { createFactContextProjection } = require("./lib/fact-context-projection");
 const { generateSourceSelection, assertSourceSelectionConfig } = require("./lib/source-selection-generation");
 const {
   enforceSourceSelectionStatus,
@@ -88,6 +90,7 @@ const {
   annotateSourceCoverageReferences,
   buildSourceCoverageCatalog,
   normalizeSourceCoverageSections,
+  validateSourceCoverage,
 } = require("./lib/source-coverage");
 
 function resolveRunMeetingDate(config, now = new Date()) {
@@ -162,6 +165,7 @@ const NON_OVERRIDABLE_V2_CODES = new Set([
   "unknown_fact_id",
   "fact_value_mismatch",
   "fact_subject_mismatch",
+  "fact_context_projection_mismatch",
   "fact_evidence_mismatch",
   "measurement_claim_structure",
   "measurement_claim_omitted",
@@ -430,7 +434,7 @@ function prepareFailureArtifacts(outputDir, collectResult, generationResult, gen
 }
 
 async function runWeeklyPrepare(config, meetingDate, dependencies = {}) {
-  // Weekly variants are source_selection; only the pair summary asks for freeform.
+  // Weekly variants use source_selection; older pair summary profiles may request freeform.
   const generationMethod = dependencies.generationMethod ?? "source_selection";
   const optionalSummary = dependencies.optionalSummary === true;
   assertWeeklyProfile(config, "weekly-prepare", { generationMethod });
@@ -812,6 +816,7 @@ function prepareV2AnnotatedContent(
 
 async function runGenerateV2(config, meetingDate, dependencies = {}) {
   const selectionMode = config.env.aiGenerationMethod === "source_selection";
+  const teamSelection = selectionMode && config.env.sourceSelectionProfile === TEAM_SUMMARY_PROFILE;
   if (selectionMode) assertSourceSelectionConfig(config);
   runAutomaticPrune(config, dependencies);
   const { snapshot, snapshotPath } = loadSnapshot(config, meetingDate);
@@ -823,11 +828,12 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
   const runPaths = buildRunPaths(config.env.outputDir, meetingDateText, attemptId);
   const startedAt = new Date().toISOString();
   const summaryQualityProfile = config.env.reportAudience === "team" ? {
-    schemaVersion: 1,
+    schemaVersion: teamSelection ? 2 : 1,
     audience: "team",
     highlightEnabled: config.reportFilter?.leaderHighlight?.enabled !== false,
     highlightMaxLines: config.reportFilter?.leaderHighlight?.maxLines || 0,
     advisoryMaxBullets: config.depthProfiles?.[3]?.advisoryMaxBullets || 60,
+    ...(teamSelection ? { generationMethod: "source_selection", selectionProfile: TEAM_SUMMARY_PROFILE, renderVersion: 1 } : {}),
   } : null;
   const generationStateBase = {
     schemaVersion: 2,
@@ -854,7 +860,7 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
     const sourceCoverageMode = SOURCE_COVERAGE_MODE;
     const buildCoverage = dependencies.buildSourceCoverageCatalog || buildSourceCoverageCatalog;
     const coverageCatalog = buildCoverage(snapshot, config.categories, {
-      projectOnly: !selectionMode && config.env.reportAudience === "team",
+      projectOnly: (!selectionMode || teamSelection) && config.env.reportAudience === "team",
     });
     Object.assign(generationStateBase, {
       sourceCoverageMode,
@@ -901,14 +907,18 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       coverageCatalog,
       sourceCoverageMode,
     };
-    const records = selectionMode ? buildSourceRecords(snapshot, aiSource, coverageCatalog) : null;
+    const records = teamSelection ? buildTeamSummaryRecords(snapshot, catalog, coverageCatalog, config)
+      : selectionMode ? buildSourceRecords(snapshot, aiSource, coverageCatalog) : null;
     if (records) {
-      Object.assign(generationStateBase, {generationMethod:"source_selection", sourceRecordsHash:records.recordsHash});
-      updateRunState(runPaths, attemptId, {generationMethod:"source_selection", sourceRecordsHash:records.recordsHash});
-      writeOwnedOrThrow(generationStatePath, attemptId, {generationMethod:"source_selection", sourceRecordsHash:records.recordsHash});
+      const selectionIdentity={generationMethod:"source_selection", sourceRecordsHash:records.recordsHash,
+        ...(teamSelection?{sourceSelectionProfile:TEAM_SUMMARY_PROFILE}: {})};
+      Object.assign(generationStateBase, selectionIdentity);
+      updateRunState(runPaths, attemptId, selectionIdentity);
+      writeOwnedOrThrow(generationStatePath, attemptId, selectionIdentity);
       writeImmutableArtifact(path.join(runPaths.runDir, "source-records.json"), JSON.stringify(records, null, 2) + "\n");
     }
-    const selectionPrompt = records ? buildSelectionPrompt(records, config) : null;
+    const selectionPrompt = teamSelection ? buildTeamSummaryPrompt(records, config)
+      : records ? buildSelectionPrompt(records, config) : null;
     const generationPlan = records ? {
       scope:"whole", promptHash:sha256(selectionPrompt),
       calls:[{id:"whole", prompt:selectionPrompt, promptLength:selectionPrompt.length}],
@@ -922,6 +932,7 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
     const promptInput = {
       ...(summaryQualityProfile ? { summaryQualityProfile } : {}),
       ...(records ? {generationMethod:"source_selection", sourceRecordsHash:records.recordsHash} : {}),
+      ...(teamSelection ? {sourceSelectionProfile:TEAM_SUMMARY_PROFILE} : {}),
       snapshotPath,
       snapshotHash: snapshot.contentHash,
       catalogHash: catalog.catalogHash,
@@ -1028,6 +1039,10 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
     const verdictProjection = records
       ? renderSourceSelectionEvidence(records, generated.evidence, config, catalog)
       : undefined;
+    const factContextProjection = teamSelection ? createFactContextProjection(
+      validateSourceCoverage(verdictProjection, coverageCatalog).cleanContent,
+      {catalogHash:catalog.catalogHash,sourceRecordsHash:records.recordsHash,profile:TEAM_SUMMARY_PROFILE}
+    ) : undefined;
     const result = validateV2ReportContract(
       snapshot.rawContent,
       workingContent,
@@ -1045,6 +1060,7 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
         knownPaths: coverageCatalog.knownPaths,
         sourceCoverageMode,
         verdictProjection,
+        factContextProjection,
       }
     );
     result.validation = enforceSourceSelectionStatus(result.validation, generationStateBase.generationMethod, {
@@ -1266,6 +1282,7 @@ async function runRevalidate(config, meetingDate) {
       repos: config.repos,
       openIssueVerifierOptions: resolveOpenIssueVerifierOptions(config),
       verdictProjection: selectionContext?.verdictProjection,
+      factContextProjection: selectionContext?.factContextProjection,
     };
     const result = coverageOwnership.enabled
       ? validateV2ReportContract(
@@ -1697,6 +1714,7 @@ function assertV2PublishEvidence({ state, reportContent, snapshot, meetingDate, 
     repos: config.repos,
     openIssueVerifierOptions: resolveOpenIssueVerifierOptions(config),
     verdictProjection: selectionContext?.verdictProjection,
+    factContextProjection: selectionContext?.factContextProjection,
   };
   const currentContract = run.coverageCatalog
     ? validateV2ReportContract(
