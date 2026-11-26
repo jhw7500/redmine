@@ -89,6 +89,8 @@
         "PIM 영상 파일": "pimApp",
         "PIM 산출물": "pimApp",
         "imx-vpu": "pimApp",
+        "imx-gst": "pimApp",
+        "imx-hantro": "pimApp",
         "vpu": "pimApp",
         "imx-gst1.0-plugin": "pimApp",
         "wlan-driver": "wlanDriver",
@@ -208,6 +210,14 @@
     },
     "imx-vpu": {
       "path": "/home/jhw/ai/opencode/projects/imx-vpu",
+      "category": "pimApp"
+    },
+    "imx-gst": {
+      "path": "/home/jhw/ai/opencode/projects/imx-gst",
+      "category": "pimApp"
+    },
+    "imx-hantro": {
+      "path": "/home/jhw/ai/opencode/projects/imx-hantro",
       "category": "pimApp"
     },
     "wlan-package": {
