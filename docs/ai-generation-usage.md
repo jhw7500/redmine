@@ -309,8 +309,10 @@ sealed snapshot -> source claims -> AI IDs/groups -> renderer -> validation
 
 새 `summaryQualityProfile` v2는 `generationMethod`, `selectionProfile`, `renderVersion`과
 audience·강조 기준을 run·generation·prompt-input에 함께 결속한다. 새 원문 선택 요약은
-`renderVersion: 2`를 사용하며 ‘…부터 확인한다’ 형태의 지침을 확인 순서로 표시한다.
-기존 원문 선택 요약은 저장된 `renderVersion: 1`로 다시 검증한다. 선택 프로필이 없는 과거
+`renderVersion: 3`을 사용한다. 기술 상세가 있는 Git 항목은 검증 절마다 통과 결과,
+0건 집계 또는 수정 전 대조가 명확하고 현재 변경의 통과 결과가 하나 이상 있을 때 제목만
+후보로 올린다. ‘…부터 확인한다’ 형태의 지침은 확인 순서로 표시한다. 기존 원문 선택 요약은
+저장된 `renderVersion: 1` 또는 `renderVersion: 2`로 다시 검증한다. 선택 프로필이 없는 과거
 요약과 `summaryQualityProfile` v1 요약은 자유 작성으로 읽는다.
 
 새 팀 pair의 자유 작성 증거는 `summary/`, 원문 선택 증거는 `summary-source-selection/`에
