@@ -283,11 +283,13 @@ AI-enabled generate의 `prompt-input.json`에는 다음 실행 증거가 기록�
 대체 경로를 사용한다. AI 제공자 오류가 나면 보존 상세본을 확인하며, 선택한 시도의 증거가
 변경되면 게시보다 복구가 우선이다.
 
-`teamReport.selectionProfile: "team_summary_v1"`은 대체 경로를 지정한다. 원문 선택은
-AI에서 근거 묶음의 ID·고정 테마·순서·강조 여부를 받아 보고서를 조립한다. 코드가 원문의 대상·조건·값·부정·결과와
-준비/실제 적용의 경계를 보존해 요약을 조립한다. 프로젝트별 최소 한 묶음, 전체 최대
-12묶음·프로젝트별 최대 5묶음을 선택하며, 사용할 수 있는 의미 있는 측정과 릴리즈를
-전부 생략하지 못하게 한다. 근거 없는 프로젝트별 수치를 채우지는 않는다.
+`teamReport.selectionProfile: "team_summary_v1"`은 대체 경로를 지정한다. 이 경로는
+`source_selection`·`whole`로 AI를 한 번 호출해 근거 묶음의 ID·고정 테마·순서·강조 여부를
+받는다. 코드가 원문의 대상·조건·값·부정·결과와 준비·실제 적용의 경계를 보존해 요약을
+조립한다. 후보 원천이 있는 프로젝트는 최소 한 묶음, 전체 최대 12묶음·프로젝트별 최대
+5묶음을 선택한다. 세션 요약만 있는 프로젝트는 필수 섹션 아래에 ‘팀 주간보고에 포함할
+항목 없음’을 표시한다. 원천은 있으나 적합한 후보가 없으면 해당 요약 시도를 실패로 기록한다.
+사용할 수 있는 의미 있는 측정과 릴리즈는 각각 하나 이상 포함한다.
 
 ```text
 sealed snapshot -> source claims -> AI IDs/groups -> renderer -> validation
@@ -305,7 +307,12 @@ sealed snapshot -> source claims -> AI IDs/groups -> renderer -> validation
 검사는 유지한다. JSON의 출처 라벨이나 임의 객체만으로 이 검사를 허용하지 않는다.
 선택하지 않은 Notion 항목의 `missing_source_id`는 기존 비차단 출처 경고로 남는다.
 
-`summaryQualityProfile`은 생성 방식과 대상·강조 기준을 run·generation·prompt-input에 결속한다.
+새 `summaryQualityProfile` v2는 `generationMethod`, `selectionProfile`, `renderVersion`과
+audience·강조 기준을 run·generation·prompt-input에 함께 결속한다. 새 원문 선택 요약은
+`renderVersion: 2`를 사용하며 ‘…부터 확인한다’ 형태의 지침을 확인 순서로 표시한다.
+기존 원문 선택 요약은 저장된 `renderVersion: 1`로 다시 검증한다. 선택 프로필이 없는 과거
+요약과 `summaryQualityProfile` v1 요약은 자유 작성으로 읽는다.
+
 새 팀 pair의 자유 작성 증거는 `summary/`, 원문 선택 증거는 `summary-source-selection/`에
 남는다. `summary.json`은 선택한 방식과 검증 결과를 기록한다. 새 팀 pair는 준비할 때
 `summary.evidence.sha256`에 요약 기록의 원본 바이트와 pair manifest를 결속한다. 게시 전

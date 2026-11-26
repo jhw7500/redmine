@@ -79,7 +79,9 @@ const {
 const { validateV2ReportContract } = require("./lib/report-contract");
 const { buildGenerationPlan } = require("./lib/report-generation-plan");
 const { buildSourceRecords, buildSelectionPrompt } = require("./lib/source-selection");
-const { TEAM_SUMMARY_PROFILE, buildTeamSummaryRecords, buildTeamSummaryPrompt } = require("./lib/team-summary-selection");
+const {
+  TEAM_SUMMARY_PROFILE, TEAM_SUMMARY_RENDER_VERSION, buildTeamSummaryRecords, buildTeamSummaryPrompt,
+} = require("./lib/team-summary-selection");
 const { createFactContextProjection } = require("./lib/fact-context-projection");
 const { generateSourceSelection, assertSourceSelectionConfig } = require("./lib/source-selection-generation");
 const {
@@ -834,7 +836,9 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
     highlightEnabled: config.reportFilter?.leaderHighlight?.enabled !== false,
     highlightMaxLines: config.reportFilter?.leaderHighlight?.maxLines || 0,
     advisoryMaxBullets: config.depthProfiles?.[3]?.advisoryMaxBullets || 60,
-    ...(teamSelection ? { generationMethod: "source_selection", selectionProfile: TEAM_SUMMARY_PROFILE, renderVersion: 1 } : {}),
+    ...(teamSelection ? {
+      generationMethod: "source_selection", selectionProfile: TEAM_SUMMARY_PROFILE, renderVersion: TEAM_SUMMARY_RENDER_VERSION,
+    } : {}),
   } : null;
   const generationStateBase = {
     schemaVersion: 2,
@@ -913,8 +917,9 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
         standaloneMeasurementFactIds: standaloneMeasurementFactIds(snapshot.rawContent, catalog),
       } : {}),
     };
-    const records = teamSelection ? buildTeamSummaryRecords(snapshot, catalog, coverageCatalog, config)
-      : selectionMode ? buildSourceRecords(snapshot, aiSource, coverageCatalog) : null;
+    const records = teamSelection ? buildTeamSummaryRecords(snapshot, catalog, coverageCatalog, config, {
+      renderVersion: summaryQualityProfile.renderVersion,
+    }) : selectionMode ? buildSourceRecords(snapshot, aiSource, coverageCatalog) : null;
     if (records) {
       const selectionIdentity={generationMethod:"source_selection", sourceRecordsHash:records.recordsHash,
         ...(teamSelection?{sourceSelectionProfile:TEAM_SUMMARY_PROFILE}: {})};
