@@ -64,6 +64,7 @@ const {
   update,
 } = require("./lib/publisher");
 const { stripAstralChars } = require("./lib/text-normalization");
+const { standaloneMeasurementFactIds } = require("./lib/verdict-evidence");
 const {
   formatWeeklyPrepareRetryCommand,
   buildWeeklyPipelinePaths,
@@ -870,12 +871,14 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       sourceCoverageMode,
       coverageCatalogHash: coverageCatalog.coverageCatalogHash,
     });
+    const teamFreeform = !selectionMode && config.env.reportAudience === "team";
     const catalog = buildFactCatalog(snapshot.rawContent, [{
       type: "meeting_date",
       raw: meetingDateText,
       subject: "meeting date",
     }], { knownPaths: coverageCatalog.knownPaths,
-      teamReport: !selectionMode && config.env.reportAudience === "team",
+      teamReport: teamFreeform,
+      standaloneMeasurementsOnly: teamFreeform,
       termAliases: config.reportFilter?.teamReport?.termAliases || {},
     });
     const meetingDateFact = catalog.facts.find((fact) => fact.type === "meeting_date");
@@ -906,6 +909,9 @@ async function runGenerateV2(config, meetingDate, dependencies = {}) {
       factInputMode,
       coverageCatalog,
       sourceCoverageMode,
+      ...(teamFreeform ? {
+        standaloneMeasurementFactIds: standaloneMeasurementFactIds(snapshot.rawContent, catalog),
+      } : {}),
     };
     const records = teamSelection ? buildTeamSummaryRecords(snapshot, catalog, coverageCatalog, config)
       : selectionMode ? buildSourceRecords(snapshot, aiSource, coverageCatalog) : null;

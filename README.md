@@ -340,18 +340,15 @@ Redmine 게시가 실패해도 보존된 depth3 상세본은 독립적으로 발
 5 7 * * 3 /home/jhw/ai/opencode/projects/redmine/run-weekly-pair-env.sh send >> /home/jhw/ai/opencode/projects/redmine/out/cron.log 2>&1
 ```
 
-현재 팀 요약은 `reportFilter.teamReport.selectionProfile: "team_summary_v1"`으로 생성한다.
-AI는 원문 근거 ID·순서·고정 테마·강조 여부만 선택하고, 코드는 대상·조건·수치·판정과
-적용 범위를 보존해 조립한다. 한 번의 선택 호출 뒤 잘못된 응답은 검증 가능한 원문 근거
-선택으로 대체하며 추가 AI 재호출은 하지 않는다. 원문 레코드 재구성·선택 해시·최종 렌더
-일치를 생성·재검증·게시에서 확인한다. 과거 v1 팀 freeform과 기존 상세본은 그대로 읽는다.
-설정 변경은 병합 후 다음 cron 준비부터 적용되며 cron 일정과 `.env`는 바꾸지 않는다.
+팀 요약은 봉인 스냅샷의 프로젝트별 결과를 자유 작성으로 먼저 정리한다. 사실·출처·출력 구조
+또는 품질 검증에서 탈락하면 같은 준비 실행에서
+`reportFilter.teamReport.selectionProfile: "team_summary_v1"`로 원문 선택을 한 번 시도한다.
+원문 선택이 필요한 보고서 참조가 있으면 이 경로로 바로 진입한다. 원문 선택은 AI가 고른
+근거 ID·순서·테마를 코드로 조립하고 선택·렌더 증거를 검증한다.
 
-`publish auto`는 통과한 요약본 → 검증 실패 후 보존한 요약본 → 통과한 depth2 → 통과한 depth3
-순으로 선택한다. 요약본을 만들 수 없고 통과한 상세본도 없으면 보존한 depth2 → depth3를 고른다.
-기존 프로젝트별 freeform 팀 요약은 부분 검증 오류 뒤에도 나머지 프로젝트를 생성한다.
-전체 선택·조립 요약도 최종 검증과 실패 기록을 보존한다. 검증 실패 요약본과 상세본에는
-검토 필요 표시가 붙는다.
+새 팀 pair의 `publish auto`는 통과한 팀 요약 뒤에 통과한 depth2 → depth3, 보존한
+depth2 → depth3 순서로 고른다. 탈락한 요약은 검토 증거로 보존한다. 이전 pair는 준비 당시
+프로필과 게시 순서로 읽는다.
 자세한 조건은 [게시 순서 정본과 검토 블록](docs/ai-generation-usage.md#주간-pair-최선-게시와-검토-블록-138)을 참조한다.
 요약본 대신 다른 보고서를 게시하면 실제 선택된 변형과 사유를 `OUTPUT_DIR/ALERT.log`에
 한 번 기록한다. 선택 당시 사유와 이벤트 ID는 시작·완료 영수증에 보존한다. ALERT 쓰기가
