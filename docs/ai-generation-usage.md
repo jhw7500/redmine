@@ -277,9 +277,14 @@ AI-enabled generate의 `prompt-input.json`에는 다음 실행 증거가 기록�
 
 `repo-config.json`의 `reportFilter.teamReport.enabled=true`이면 pair의 회의용 summary만 팀 독자용으로 생성한다. 상세 depth2·depth3와 Slack 상세 근거는 기존 원문 선택 방식 유지.
 
-현재 설정은 `teamReport.selectionProfile: "team_summary_v1"`을 명시한다. 이 프로필은
-`source_selection`·`whole`로 한 번 호출하며, AI에는 보호 사실 문장의 재작성 대신 원문 근거
-묶음의 ID·고정 테마·순서·강조 여부만 받는다. 코드가 원문의 대상·조건·값·부정·결과와
+먼저 `freeform`·`project`로 각 프로젝트의 결과를 합성하고 판정·수치는 사실 표식으로
+보존한다. 부분 또는 최종 검증과 요약 품질 검사에서 탈락하면 같은 봉인 스냅샷으로
+`source_selection`·`whole`을 한 번 시도한다. 보고서 참조가 원문 선택을 요구하면 바로
+대체 경로를 사용한다. AI 제공자 오류가 나면 보존 상세본을 확인하며, 선택한 시도의 증거가
+변경되면 게시보다 복구가 우선이다.
+
+`teamReport.selectionProfile: "team_summary_v1"`은 대체 경로를 지정한다. 원문 선택은
+AI에서 근거 묶음의 ID·고정 테마·순서·강조 여부를 받아 보고서를 조립한다. 코드가 원문의 대상·조건·값·부정·결과와
 준비/실제 적용의 경계를 보존해 요약을 조립한다. 프로젝트별 최소 한 묶음, 전체 최대
 12묶음·프로젝트별 최대 5묶음을 선택하며, 사용할 수 있는 의미 있는 측정과 릴리즈를
 전부 생략하지 못하게 한다. 근거 없는 프로젝트별 수치를 채우지는 않는다.
@@ -300,12 +305,15 @@ sealed snapshot -> source claims -> AI IDs/groups -> renderer -> validation
 검사는 유지한다. JSON의 출처 라벨이나 임의 객체만으로 이 검사를 허용하지 않는다.
 선택하지 않은 Notion 항목의 `missing_source_id`는 기존 비차단 출처 경고로 남는다.
 
-새 `summaryQualityProfile` v2는 `generationMethod`, `selectionProfile`, `renderVersion`과
-audience·강조 기준을 run·generation·prompt-input에 함께 결속한다. 설정 키가 없거나
-기존 v1 profile인 요약은 기존 freeform으로 읽는다. 기존 pair를 새 방식으로 추정하거나
-기록을 덮어쓰지 않는다. 이 설정 변경은 병합 후 다음 cron 준비에 적용된다.
+`summaryQualityProfile`은 생성 방식과 대상·강조 기준을 run·generation·prompt-input에 결속한다.
+새 팀 pair의 자유 작성 증거는 `summary/`, 원문 선택 증거는 `summary-source-selection/`에
+남는다. `summary.json`은 선택한 방식과 검증 결과를 기록한다. 새 팀 pair는 준비할 때
+`summary.evidence.sha256`에 요약 기록의 원본 바이트와 pair manifest를 결속한다. 게시 전
+준비 증적을 확인하고 기록이 누락되거나 달라졌으면 복구를 요구한다. 준비 증적이 없는
+`summaryPolicyVersion: 2` pair는 새 `OUTPUT_DIR`에서 다시 준비한다. 기존 v1 pair는 준비 당시
+기록을 따른다.
 
-아래 기존 freeform 설명과 M 근거 계약은 과거 v1 팀 요약과 일반 freeform 생성에 적용한다.
+팀 자유 작성은 아래 기준을 적용한다.
 
 - 원본 sealed snapshot은 유지하고 summary의 필수 source coverage를 프로젝트 루트(PIM·Wireless Lan·ETC)로 설정. 숫자·상태와 다른 프로젝트로의 근거 이동 검증은 유지.
 - 원문을 자르지 않도록 기존 `project` scope를 사용. 존재하는 프로젝트마다 한 번 호출하며, 한 summary generation 안에서 실행한다. 실패한 summary를 자동 재생성하지 않음.
@@ -313,11 +321,10 @@ audience·강조 기준을 run·generation·prompt-input에 함께 결속한다.
 - 실제 릴리즈 버전과 측정·단축 시간, 용량·처리량·온도·전력 등 성과 수치는 보존. 커밋·중간 빌드 식별자만 제외하며, 값·단위·측정 대상·조건과 패키지 제작/장비 설치/고객 전달 단계를 함께 유지. 근거 없는 수치나 계산값은 추가하지 않음.
 - `leaderHighlight.guidance`는 상세 선택과 summary에 공통 적용. ETC도 같은 중요도 기준으로 선정하며 대표 성과 한 줄에만 밑줄 표시.
 - team summary 품질 검사에서 구현 경로·명시적인 식별자, 서술형 종결, 한 줄의 여러 문장, 강조 비활성/상한 위반을 차단. 원문 근거와 의미 보존은 최종 검토 대상.
-- `publish auto`는 통과한 summary, 보존된 실패 summary, 통과한 상세본, 보존된 실패 상세본 순서로 선택. 수동 수정본을 검증된 summary로 가장해 게시하지 않음.
 - 설정 변경은 다음 cron 준비부터 적용. 기존 pair의 immutable 산출물을 재작성하지 않음. Redmine 게시와 Slack 전송에는 별도 승인 필요.
 - 생성 당시 audience·밑줄 사용 여부·상한은 `summaryQualityProfile`로 run·generation·prompt-input 증거에 결속. 게시 시 해당 기준으로 재검사하며, 이 필드가 없는 과거 summary는 기존 작성 기준 적용.
 
-기존 freeform 팀 요약은 읽기 쉬운 원문 측정 구절을 `M` 근거로 묶는다. AI가 ID를 선택하면 코드가 대상·조건·변경 전후·단위가 고정된 구절을 독립 불릿으로 확장한다. `teamReport.termAliases`는 첫 수치 앞의 업무 용어만 바꾸며 숫자 이후의 값·단위·조건은 원문 그대로 유지한다. 실제 릴리즈 버전은 suffix까지 보존한 중립적인 버전 불릿으로 출력한다. 제작·장비 설치·고객 전달은 별도 원문 근거로 확인하고, 제작 버전과 설치 버전이 다르면 각각 표시한다.
+자유 작성 팀 요약은 읽기 쉬운 원문 측정 구절을 `M` 근거로 묶는다. 판정 문맥에 종속된 측정은 원문의 수치·판정 표식으로 보존하며 독립 측정 근거가 필요한 항목으로 세지 않는다. AI가 ID를 선택하면 코드가 대상·조건·변경 전후·단위가 고정된 구절을 독립 불릿으로 확장한다. `teamReport.termAliases`는 첫 수치 앞의 업무 용어만 바꾸며 숫자 이후의 값·단위·조건은 원문 그대로 유지한다. 실제 릴리즈 버전은 suffix까지 보존한 중립적인 버전 불릿으로 출력한다. 제작·장비 설치·고객 전달은 별도 원문 근거로 확인하고, 제작 버전과 설치 버전이 다르면 각각 표시한다.
 
 릴리즈의 제작·설치·고객 전달 설명은 같은 원문 절에 해당 버전과 명시적인 단계·상태가 함께 확인된 근거에 결속한다. 새 catalog에는 원문 구절과 위치를 `releaseStageEvidence`로 보존하고 재현 검증한다. 서로 다른 버전이나 상태 변화가 한 절에 섞였거나 단계·상태가 불명확하면 완료 근거로 인정하지 않는다. 단계 설명은 ‘장비 설치 완료’처럼 한 줄에 상태까지 명시하고 바로 아래에 버전 불릿을 배치한다. 상위 단계 설명과 버전 근거가 다르면 `release_stage_mismatch`로 차단하며 override로 우회할 수 없다. 같은 부모 아래의 평면 배치는 바로 인접한 단계와 버전을 일대일로 연결할 수 있을 때만 허용한다. 멀리 떨어졌거나 양옆의 여러 버전 중 하나를 골라야 하는 단계 설명은 차단한다. 근거가 없는 버전은 중립적인 버전 표기만 사용할 수 있다.
 
@@ -336,17 +343,16 @@ audience·강조 기준을 run·generation·prompt-input에 함께 결속한다.
 
 **게시 순서** (`lib/weekly-report-pair.js` `publishWeeklyPair`)
 
-1. 통과한 summary → 검증 실패 후 보존한 summary → 통과한 depth2 → 통과한 depth3 순으로 고른다.
+1. 새 팀 pair는 통과한 summary → 통과한 depth2 → 통과한 depth3 순으로 고른다.
+   과거 pair는 보존한 탈락 summary도 통과한 상세본보다 먼저 고려한다.
 2. summary를 만들 수 없고 통과한 상세본도 없으면 거부된 depth2 → depth3 중 첫 사용 가능한 것을 문제 줄 포함 그대로 게시한다. 거부 후보는 파일 내용이 기록된 해시와 일치하고 섹션 헤더가 정확히 1개이며 경로가 pair 폴더 안으로 해석되어야 한다.
 3. 후보가 없으면 `NO_PUBLISHABLE_REPORT`로 실패한다. exit가 0이 아니므로 기존 `[ALERT] … 보고 실패` 알림이 나간다.
 4. depth를 2 또는 3으로 명시하면 실패한 변형은 여전히 게시 거부.
 5. 거부 보고서 게시는 영수증에 `status: "rejected_published"`를 남긴다. 같은 날짜 재실행은 영수증이 지금 고른 거부 보고서(변형·depth·보고서 해시·`rejected_published`)와 정확히 같으면 쓰기 없이 skip(exit 0)하고, 다르면 `Already published`로 거부된다. `publication.started.json`만 있고 `completed`가 없는 중단 상태는 복구 승인이 필요하다.
 
-팀 요약본은 프로젝트별 사실·출처 검증 오류가 있어도 다음 프로젝트를 한 번씩 생성하고,
-합친 요약본을 기존 최종 검증에 넘긴다. 실패하면 검증 결과와 전체 거부 보고서를 보존해
-검토 표시와 함께 게시한다. 잘못된 프로젝트·섹션 구조와 응답 없음·AI 호출 실패는 계속
-생성을 중단하며, 완성된 요약본이 없으면 상세본을 선택한다. 일반 생성은 기존처럼 첫
-프로젝트 검증 오류에서 중단한다. 이 정책은 이미 게시한 보고서를 자동으로 교체하지 않는다.
+팀 자유 작성은 프로젝트별 사실·출처 검증 오류가 있어도 나머지 프로젝트를 생성한 뒤
+합친 요약을 최종 검증한다. 두 요약 시도가 탈락하면 증거를 검토용으로 보존하고 상세본
+선택으로 넘어간다. 기존 게시 영수증으로 같은 보고서의 재실행과 복구를 제어한다.
 
 **검토 블록** (`lib/review-block.js` `buildReviewBlock`, `lib/publisher.js` `update`의 `options.reviewBlock`)
 
